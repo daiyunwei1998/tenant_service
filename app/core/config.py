@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
 
     image_host: ClassVar[str] = "https://flash-response-cloud.s3.ap-northeast-3.amazonaws.com/"
-    s3_bucket_name: ClassVar[str] = "flash-response-cloud   "
+    s3_bucket_name: ClassVar[str] = "flash-response-cloud"
 
     # MySQL Configuration (Loaded from .env file)
     MYSQL_USER: str

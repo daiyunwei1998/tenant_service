@@ -1,14 +1,15 @@
 import logging
 
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine
 from sqlalchemy.future import select
 from databases import Database
 from sqlalchemy import delete as sqlalchemy_delete, inspect
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
+from app.exceptions.tenant_exceptions import DuplicateTenantNameException, DuplicateTenantAliasException
 from app.models.tenant import Tenant, Base
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema
 from app.services.image_upload import upload_to_s3
@@ -71,20 +72,51 @@ async def shutdown():
         await database.disconnect()
 
 
-# Create Tenant
-@app.post("/tenants/", response_model=TenantInfoSchema)
-async def register_tenant(tenant_data: TenantCreateSchema, db: AsyncSession = Depends(get_db)):
+@app.post("/api/v1/tenants/", response_model=TenantInfoSchema)
+async def register_tenant(
+        name: str = Form(...),
+        alias: str = Form(...),
+        logo: UploadFile = File(None),
+        db: AsyncSession = Depends(get_db)
+):
     try:
-        # Delegate the tenant registration to the service
+        tenant_data = TenantCreateSchema(name=name, alias=alias)
+
+        # Delegate tenant registration to the service layer
         new_tenant = await TenantService.register_tenant(tenant_data, db)
+
+        # Upload logo to S3 and get the path if logo is provided
+        if logo:
+            try:
+                tenant_id = new_tenant.tenant_id
+                logo_path = await upload_to_s3(logo, tenant_id)
+                new_tenant.logo = logo_path
+            except Exception as e:
+                # If S3 upload fails, delete the tenant and raise an exception
+                await TenantService.delete_tenant_internal(new_tenant.tenant_id, db)
+                raise HTTPException(status_code=500, detail=f"Failed to upload logo: {str(e)}")
+
+        await db.commit()
+        await db.refresh(new_tenant)
+
         return new_tenant
+
+    except IntegrityError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": "DUPLICATE_TENANT", "message": "Tenant with this name or alias already exists"}
+        )
+    except DuplicateTenantNameException as e:
+        raise HTTPException(status_code=400, detail={"error_code": "DUPLICATE_TENANT_NAME", "message": e.message})
+
+    except DuplicateTenantAliasException as e:
+        raise HTTPException(status_code=400, detail={"error_code": "DUPLICATE_TENANT_ALIAS", "message": e.message})
+
     except Exception as e:
-        # Catch any other general exceptions
-        raise HTTPException(status_code=400, detail=f"Failed to register tenant: {str(e)}")
-
-
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 # Delete Tenant
-@app.delete("/tenants/{tenant_id}", status_code=204)
+@app.delete("/api/v1/tenants/{tenant_id}", status_code=204)
 async def delete_tenant(tenant_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(sqlalchemy_delete(Tenant).where(Tenant.tenant_id == tenant_id))
     if result.rowcount == 0:
@@ -94,7 +126,7 @@ async def delete_tenant(tenant_id: str, db: AsyncSession = Depends(get_db)):
 
 
 # Update Tenant
-@app.patch("/tenants/{tenant_id}", response_model=TenantInfoSchema)
+@app.patch("/api/v1/tenants/{tenant_id}", response_model=TenantInfoSchema)
 async def update_tenant(tenant_id: str, tenant_data: TenantUpdateSchema, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
     tenant = result.scalar_one_or_none()
@@ -110,7 +142,7 @@ async def update_tenant(tenant_id: str, tenant_data: TenantUpdateSchema, db: Asy
 
 
 # Update Tenant Logo
-@app.put("/tenants/{tenant_id}/logo", response_model=TenantInfoSchema)
+@app.put("/api/v1/tenants/{tenant_id}/logo", response_model=TenantInfoSchema)
 async def update_tenant_logo(tenant_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
     tenant = result.scalar_one_or_none()
@@ -125,7 +157,7 @@ async def update_tenant_logo(tenant_id: str, file: UploadFile = File(...), db: A
 
 
 # Get Tenant by ID
-@app.get("/tenants/{tenant_id}", response_model=TenantInfoSchema)
+@app.get("/api/v1/tenants/{tenant_id}", response_model=TenantInfoSchema)
 async def get_tenant(tenant_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
     tenant = result.scalar_one_or_none()
@@ -134,7 +166,7 @@ async def get_tenant(tenant_id: str, db: AsyncSession = Depends(get_db)):
     return tenant
 
 # Get Tenant by alias
-@app.get("/tenants/{alias}", response_model=TenantInfoSchema)
+@app.get("/api/v1/tenants/{alias}", response_model=TenantInfoSchema)
 async def get_tenant(alias: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Tenant).where(Tenant.alias == alias))
     tenant = result.scalar_one_or_none()

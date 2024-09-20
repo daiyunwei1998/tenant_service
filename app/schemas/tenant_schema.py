@@ -5,7 +5,7 @@ from pydantic import BaseModel, constr
 
 
 class TenantCreateSchema(BaseModel):
-    logo: str = ""
+    logo:str = ""
     name: str
     alias: constr(min_length=1, max_length=10)
 

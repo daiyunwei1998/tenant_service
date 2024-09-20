@@ -6,6 +6,11 @@ from sqlalchemy.schema import Index
 Base = declarative_base()
 
 
+class SerializerMixin:
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
 class Tenant(Base):
     __tablename__ = 'tenants'
 
