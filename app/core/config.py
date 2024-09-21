@@ -16,6 +16,23 @@ class Settings(BaseSettings):
     MYSQL_PORT: int
     MYSQL_DB: str
 
+    # knowledge base
+    OPENAI_API_KEY:str =  os.getenv('OPEN_AI_KEY')
+    MILVUS_HOST:str = os.getenv('MILVUS_HOST')
+    MILVUS_PORT:str = os.getenv('MILVUS_PORT')
+
+    # RabbitMQ Configuration
+    RABBITMQ_HOST: str = os.getenv('RABBITMQ_HOST')
+    RABBITMQ_USERNAME: str = os.getenv('RABBITMQ_USERNAME')
+    RABBITMQ_PASSWORD: str = os.getenv('RABBITMQ_PASSWORD')
+
+    # Redis Configuration
+    redis_host: str = os.getenv("REDIS_HOST")
+    redis_password: str = os.getenv("REDIS_PASSWORD")
+
+    # embedding model
+    embedding_model: str = "text-embedding-3-small"
+
     @property
     def database_url(self):
         return f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
