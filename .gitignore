@@ -171,3 +171,6 @@ out/
 # others
 *.swp
 *.swo
+
+# upload folder
+/uploads

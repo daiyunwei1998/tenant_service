@@ -13,3 +13,9 @@ pytest
 pytest-asyncio
 httpx
 greenlet
+pika
+celery[redis]
+redis
+openparse
+pymilvus
+openai
