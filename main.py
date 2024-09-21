@@ -15,7 +15,9 @@ from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, Tena
 from app.services.image_upload import upload_to_s3
 from app.services.tenant_service import TenantService
 from fastapi.middleware.cors import CORSMiddleware
+from app.routers.file_upload import  router as upload_router
 app = FastAPI()
+app.include_router(upload_router, prefix="/files")
 
 app.add_middleware(
     CORSMiddleware,
