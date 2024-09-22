@@ -1,11 +1,15 @@
-from fastapi import HTTPException
+import logging
+
+from fastapi import HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.exceptions.tenant_exceptions import DuplicateTenantNameException, DuplicateTenantAliasException
 from app.models.tenant import Tenant
 from app.schemas.tenant_schema import TenantCreateSchema
-from sqlalchemy import delete as sqlalchemy_delete
+from sqlalchemy import delete as sqlalchemy_delete, or_
+
+
 
 class TenantService:
 
@@ -79,3 +83,27 @@ class TenantService:
         except Exception as e:
             await db.rollback()
             raise HTTPException(status_code=500, detail=f"Failed to delete tenant: {str(e)}")
+
+    @staticmethod
+    async def get_tenant_by_alias_or_name(db: AsyncSession,  name: str = None, alias: str = None, tenant_id:str = None):
+        # Validate at least one query parameter is provided
+        if not name and not alias and not tenant_id:
+            raise HTTPException(status_code=400, detail="You must provide either a name or alias to check.")
+
+        # Build the query
+        query = select(Tenant)
+
+        if name and alias:
+            query = query.where(or_(Tenant.name == name, Tenant.alias == alias))
+        elif name:
+            query = query.where(Tenant.name == name)
+        elif alias:
+            query = query.where(Tenant.alias == alias)
+        elif tenant_id:
+            query = query.where(Tenant.tenant_id == tenant_id)
+
+        # Execute the query
+        result = await db.execute(query)
+        tenant = result.scalar_one_or_none()
+
+        return tenant

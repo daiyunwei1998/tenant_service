@@ -32,7 +32,7 @@ def process_file(file_path: str, tenant_id: str):
     try:
         # Process the file with KnowledgeBaseService
         texts = KnowledgeBaseService.process_file(file_path)
-        vector_store_manager.process_tenant_data(tenant_id, texts)
+        vector_store_manager.process_tenant_data(tenant_id, texts, os.path.basename(file_path))
 
         logging.info(f"Processing completed for tenant {tenant_id}, file: {file_path}")
 

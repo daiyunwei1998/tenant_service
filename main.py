@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine
@@ -16,8 +16,10 @@ from app.services.image_upload import upload_to_s3
 from app.services.tenant_service import TenantService
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.file_upload import  router as upload_router
+from app.routers.knowlege_base import router as knowlege_base_router
 app = FastAPI()
 app.include_router(upload_router, prefix="/files")
+app.include_router(knowlege_base_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -118,13 +120,15 @@ async def register_tenant(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 # Delete Tenant
-@app.delete("/api/v1/tenants/{tenant_id}", status_code=204)
+@app.delete("/api/v1/tenants/{tenant_id}")
 async def delete_tenant(tenant_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(sqlalchemy_delete(Tenant).where(Tenant.tenant_id == tenant_id))
+    await db.commit()
+
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    await db.commit()
-    return JSONResponse(status_code=200, content={"message": "Tenant deleted"})
+
+    return JSONResponse(status_code=204, content=None)
 
 
 # Update Tenant
@@ -158,20 +162,33 @@ async def update_tenant_logo(tenant_id: str, file: UploadFile = File(...), db: A
     return tenant
 
 
-# Get Tenant by ID
-@app.get("/api/v1/tenants/{tenant_id}", response_model=TenantInfoSchema)
-async def get_tenant(tenant_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
-    tenant = result.scalar_one_or_none()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    return tenant
+@app.get("/api/v1/tenants/check")
+async def check_tenant(
+        db: AsyncSession = Depends(get_db),
+        name: str = Query(None, description="Tenant name to check"),
+        alias: str = Query(None, description="Tenant alias to check"),
+):
 
-# Get Tenant by alias
-@app.get("/api/v1/tenants/{alias}", response_model=TenantInfoSchema)
-async def get_tenant(alias: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Tenant).where(Tenant.alias == alias))
-    tenant = result.scalar_one_or_none()
-    if not tenant:
+    # Call the service method to check if tenant exists
+    tenant= await TenantService.get_tenant_by_alias_or_name(db, name=name, alias=alias)
+
+    if tenant:
+        return {"data": tenant}
+    else:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return tenant
+
+@app.get("/api/v1/tenants/find")
+async def get_tenant(
+        db: AsyncSession = Depends(get_db),
+        tenant_id: str = Query(None, description="Tenant id to check"),
+        alias: str = Query(None, description="Tenant alias to check"),
+        name:str = Query(None, description="Tenant name to check"),
+):
+
+    # Call the service method to check if tenant exists
+    tenant = await TenantService.get_tenant_by_alias_or_name(db, name=name, alias=alias, tenant_id = tenant_id)
+
+    if tenant:
+        return {"data": tenant}
+    else:
+        raise HTTPException(status_code=404, detail="Tenant not found")
