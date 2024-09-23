@@ -1,3 +1,5 @@
+import pika
+import json
 from celery import Celery
 import os
 
@@ -27,6 +29,27 @@ openai_service = OpenAIEmbeddingService(api_key=settings.OPENAI_API_KEY, model =
 milvus_service = MilvusCollectionService(host=settings.MILVUS_HOST, port=settings.MILVUS_PORT)
 vector_store_manager = VectorStoreManager(openai_service, milvus_service)
 
+def send_rabbitmq_message(queue_name, message):
+    # Establish a connection to RabbitMQ
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host))
+    channel = connection.channel()
+
+    # Declare the queue (it will only be created if it doesn't already exist)
+    channel.queue_declare(queue=queue_name, durable=True)
+
+    # Publish the message to the queue
+    channel.basic_publish(
+        exchange='',
+        routing_key=queue_name,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(
+            delivery_mode=2,  # make message persistent
+        )
+    )
+
+    # Close the connection
+    connection.close()
+
 @celery_app.task
 def process_file(file_path: str, tenant_id: str):
     try:
@@ -44,7 +67,15 @@ def process_file(file_path: str, tenant_id: str):
         else:
             logging.error(f"File {file_path} not found when attempting to delete.")
 
-        return f"Task completed for {file_path}"
+        # Send a structured message to RabbitMQ
+        message = {
+            "tenantId": tenant_id,
+            "message": f"Task completed for {os.path.basename(file_path)}, tenant {tenant_id}",
+            "file": os.path.basename(file_path),
+        }
+        send_rabbitmq_message('chunking_complete_notification_queue', message)
+
+        return message
 
     except Exception as e:
         logging.error(f"Error processing file {file_path}: {str(e)}")
