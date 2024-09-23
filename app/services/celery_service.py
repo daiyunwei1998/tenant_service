@@ -29,26 +29,47 @@ openai_service = OpenAIEmbeddingService(api_key=settings.OPENAI_API_KEY, model =
 milvus_service = MilvusCollectionService(host=settings.MILVUS_HOST, port=settings.MILVUS_PORT)
 vector_store_manager = VectorStoreManager(openai_service, milvus_service)
 
+
 def send_rabbitmq_message(queue_name, message):
-    # Establish a connection to RabbitMQ
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host))
-    channel = connection.channel()
+    # Define connection parameters, including credentials
+    credentials = pika.PlainCredentials(rabbitmq_username, rabbitmq_password)
 
-    # Declare the queue (it will only be created if it doesn't already exist)
-    channel.queue_declare(queue=queue_name, durable=True)
-
-    # Publish the message to the queue
-    channel.basic_publish(
-        exchange='',
-        routing_key=queue_name,
-        body=json.dumps(message),
-        properties=pika.BasicProperties(
-            delivery_mode=2,  # make message persistent
-        )
+    connection_params = pika.ConnectionParameters(
+        host=rabbitmq_host,
+        port=5672,
+        virtual_host='/',
+        credentials=credentials,
+        heartbeat=600,
+        blocked_connection_timeout=300
     )
 
-    # Close the connection
-    connection.close()
+    try:
+        # Establish a connection to RabbitMQ
+        connection = pika.BlockingConnection(connection_params)
+        channel = connection.channel()
+
+        # Declare the queue (it will only be created if it doesn't already exist)
+        channel.queue_declare(queue=queue_name, durable=True)
+
+        # Publish the message to the queue
+        channel.basic_publish(
+            exchange='',
+            routing_key=queue_name,
+            body=json.dumps(message),
+            properties=pika.BasicProperties(
+                delivery_mode=2,  # Make message persistent
+            )
+        )
+
+        print(f"Message sent to queue {queue_name}: {message}")
+
+    except pika.exceptions.AMQPConnectionError as e:
+        print(f"Failed to connect to RabbitMQ: {e}")
+
+    finally:
+        # Always close the connection
+        if connection and connection.is_open:
+            connection.close()
 
 @celery_app.task
 def process_file(file_path: str, tenant_id: str):
