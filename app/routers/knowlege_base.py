@@ -40,22 +40,7 @@ class EntriesByDocNameResponse(BaseModel):
     docName: str
     entries: List[dict]
 
-#
-# # 1. Get a list of unique doc_name
-# @router.get("/{tenantId}/doc-names", response_model=DocNamesResponse)
-# async def get_unique_doc_names_with_paging(
-#     tenantId: str = Path(..., description="The unique ID of the tenant"),
-#    ):
-#     try:
-#         # Fetch paginated doc_names using the limit and last_doc_name marker
-#         doc_names = get_tenant_docs(tenantId)
-#         return {"tenantId": tenantId, "docNames": doc_names}
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
-
-
-
-# 2. Update an entry's content identified by ID
+# Update an entry's content identified by ID
 @router.put("/{tenantId}/entries/{entryId}", response_model=UpdateResponse)
 async def update_entry_by_id(
     update_request: UpdateContentRequest,
@@ -74,7 +59,7 @@ async def update_entry_by_id(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 3. Get a list of entries (content, id) by doc_name
+# Get a list of entries (content, id) by doc_name
 @router.get("/{tenantId}/entries", response_model=EntriesByDocNameResponse)
 async def get_entries_by_doc_name(
     tenantId: str = Path(..., description="The unique ID of the tenant"),
