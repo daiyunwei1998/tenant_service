@@ -3,8 +3,8 @@ from typing import List, Optional
 from openai import OpenAI
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
 from app.core.config import settings
-from app.repository.database import SessionLocal, create_tenant_doc, update_tenant_doc_entries, delete_tenant_doc, \
-    get_tenant_docs
+from app.routers.tenant_doc import get_tenant_docs, create_tenant_doc, delete_tenant_doc, update_tenant_doc_entries
+from main import SessionLocal
 
 
 class OpenAIEmbeddingService:
