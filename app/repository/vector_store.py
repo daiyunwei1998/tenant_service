@@ -3,6 +3,8 @@ from typing import List, Optional
 from openai import OpenAI
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
 from app.core.config import settings
+from app.repository.database import SessionLocal, create_tenant_doc, update_tenant_doc_entries, delete_tenant_doc, \
+    get_tenant_docs
 
 
 class OpenAIEmbeddingService:
@@ -79,27 +81,6 @@ class MilvusCollectionService:
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve doc names: {e}")
 
-    def update_entry_by_id(self, collection: Collection, entry_id: int, new_content: str,
-                           openai_service: OpenAIEmbeddingService):
-        """Update content and recalculate embedding by id."""
-        try:
-            # Query to get the current entry
-            results = collection.query(expr=f"id == {entry_id}", output_fields=["embedding", "content"])
-
-            if len(results) == 0:
-                raise RuntimeError(f"No entry found with id: {entry_id}")
-
-            # Generate new embedding for the updated content
-            new_embedding = openai_service.get_embeddings([new_content])[0]
-
-            # Update the entry in the collection
-            collection.update([entry_id], {"embedding": new_embedding, "content": new_content})
-            collection.flush()
-
-            print(f"Entry with id {entry_id} updated successfully.")
-        except Exception as e:
-            raise RuntimeError(f"Failed to update entry by id: {e}")
-
     def get_entries_by_doc_name(self, collection: Collection, doc_name: str) -> List[dict]:
         """Retrieve entries (content, id) by doc_name."""
         try:
@@ -128,6 +109,43 @@ class MilvusCollectionService:
             return doc_names
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve paginated doc names: {e}")
+
+    def get_doc_name_by_entry_id(self, collection, entry_id):
+        """Retrieve the doc_name for a given entry_id."""
+        try:
+            results = collection.query(expr=f"id == {entry_id}", output_fields=["doc_name"])
+            if results:
+                return results[0]["doc_name"]
+            return None
+        except Exception as e:
+            raise RuntimeError(f"Failed to retrieve doc_name for entry_id {entry_id}: {e}")
+
+    def delete_entry_by_id(self, collection: Collection, entry_id: int):
+        """Delete an entry by its id."""
+        try:
+            collection.delete(f"id == {entry_id}")
+            collection.flush()
+            print(f"Entry with id {entry_id} deleted successfully.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to delete entry with id {entry_id}: {e}")
+
+    def update_entry_by_id(self, collection: Collection, entry_id: int, new_content: str,
+                           openai_service: OpenAIEmbeddingService):
+        """Update content and recalculate embedding by id."""
+        try:
+            # Generate new embedding for the updated content
+            new_embedding = openai_service.get_embeddings([new_content])[0]
+
+            # Update the entry in the collection
+            collection.update(
+                expr=f"id == {entry_id}",
+                data={"embedding": new_embedding, "content": new_content}
+            )
+            collection.flush()
+
+            print(f"Entry with id {entry_id} updated successfully.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to update entry by id: {e}")
 
 
 class VectorStoreManager:
@@ -166,17 +184,31 @@ class VectorStoreManager:
         # Create an index for faster search queries
         self.milvus_service.create_index(collection)
 
+        with SessionLocal() as db:
+            create_tenant_doc(db, tenant_id, doc_name, len(content))
+
     def get_unique_doc_names(self, tenant_id: str) -> List[str]:
         """Get a list of unique doc_name entries for a tenant."""
         tenant_collection_name = tenant_id
         collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
         return self.milvus_service.get_unique_doc_names(collection)
 
+    def get_tenant_documents(self, tenant_id: str):
+        """Get all documents for a tenant."""
+        with SessionLocal() as db:
+            return get_tenant_docs(db, tenant_id)
+
     def update_entry_by_id(self, tenant_id: str, entry_id: int, new_content: str):
         """Update an entry's content by id and recalculate embedding."""
         tenant_collection_name = tenant_id
         collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
         self.milvus_service.update_entry_by_id(collection, entry_id, new_content, self.openai_service)
+
+        with SessionLocal() as db:
+            doc = self.milvus_service.get_doc_name_by_entry_id(collection, entry_id)
+            if doc:
+                entries = self.get_entries_by_doc_name(tenant_id, doc)
+                update_tenant_doc_entries(db, tenant_id, doc, len(entries))
 
     def get_entries_by_doc_name(self, tenant_id: str, doc_name: str) -> List[dict]:
         """Get a list of entries (content, id) by doc_name."""
@@ -200,6 +232,25 @@ class VectorStoreManager:
         ]
         return CollectionSchema(fields,enable_dynamic_field=True, description=f"{tenant_id} knowledge base")
 
+    def delete_entry_by_id(self, tenant_id: str, entry_id: int):
+        """Delete an entry by id and update the SQLAlchemy ORM database."""
+        tenant_collection_name = tenant_id
+        collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
+
+        # Get the doc_name before deleting the entry
+        doc_name = self.milvus_service.get_doc_name_by_entry_id(collection, entry_id)
+
+        # Delete the entry from Milvus
+        self.milvus_service.delete_entry_by_id(collection, entry_id)
+
+        # Update SQLAlchemy ORM database
+        with SessionLocal() as db:
+            if doc_name:
+                entries = self.get_entries_by_doc_name(tenant_id, doc_name)
+                if len(entries) == 0:
+                    delete_tenant_doc(db, tenant_id, doc_name)
+                else:
+                    update_tenant_doc_entries(db, tenant_id, doc_name, len(entries))
 
 
 # Example usage inside the main block, which is executed only when the script is run directly

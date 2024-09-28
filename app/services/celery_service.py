@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 
 from app.core.config import settings
+from app.repository.database import SessionLocal, create_tenant_doc
 from app.repository.vector_store import OpenAIEmbeddingService, MilvusCollectionService, VectorStoreManager
 from app.services.knowledge_base_service import KnowledgeBaseService
 
@@ -77,6 +78,9 @@ def process_file(file_path: str, tenant_id: str):
         # Process the file with KnowledgeBaseService
         texts = KnowledgeBaseService.process_file(file_path)
         vector_store_manager.process_tenant_data(tenant_id, texts, os.path.basename(file_path))
+
+        with SessionLocal() as db:
+            create_tenant_doc(db, tenant_id, os.path.basename(file_path), len(texts))
 
         logging.info(f"Processing completed for tenant {tenant_id}, file: {file_path}")
 

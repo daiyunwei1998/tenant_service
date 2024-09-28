@@ -40,16 +40,14 @@ class EntriesByDocNameResponse(BaseModel):
     entries: List[dict]
 
 
-# 1. Get a list of unique doc_name with paging
+# 1. Get a list of unique doc_name
 @router.get("/{tenantId}/doc-names", response_model=DocNamesResponse)
 async def get_unique_doc_names_with_paging(
     tenantId: str = Path(..., description="The unique ID of the tenant"),
-    limit: int = Query(100, description="Limit the number of doc_name entries returned"),
-    last_doc_name: Optional[str] = Query(None, description="The last doc_name from the previous page for paging")
-):
+   ):
     try:
         # Fetch paginated doc_names using the limit and last_doc_name marker
-        doc_names = vector_store_manager.get_doc_names_with_paging(tenantId, limit=limit, last_doc_name=last_doc_name)
+        doc_names = vector_store_manager.get_tenant_documents(tenantId)
         return {"tenantId": tenantId, "docNames": doc_names}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
