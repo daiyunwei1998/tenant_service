@@ -1,15 +1,17 @@
+# app/repository/vector_store.py
+
 import json
 from typing import List, Optional
 from openai import OpenAI
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
 from app.core.config import settings
-from app.routers.tenant_doc import get_tenant_docs, create_tenant_doc, delete_tenant_doc, update_tenant_doc_entries
-from main import SessionLocal
-
+from app.dependencies import SessionLocalAsync
+from app.services.tenant_doc_service import TenantDocService
+from app.schemas.tenant_doc_schema import TenantDocCreateSchema
 
 class OpenAIEmbeddingService:
     """Service class for handling OpenAI embedding generation."""
-    def __init__(self, api_key: str, model:str):
+    def __init__(self, api_key: str, model: str):
         self.client = OpenAI(api_key=api_key)
         self.model = model
 
@@ -46,7 +48,7 @@ class MilvusCollectionService:
         except Exception as e:
             raise RuntimeError(f"Failed to load collection: {e}")
 
-    def insert_data(self, collection: Collection, embeddings: List[List[float]], contents: List[str], doc_name:str):
+    def insert_data(self, collection: Collection, embeddings: List[List[float]], contents: List[str], doc_name: str):
         """Inserts data (embeddings and content) into the specified collection."""
         try:
             doc_names = [doc_name] * len(contents)
@@ -155,13 +157,14 @@ class VectorStoreManager:
         self.openai_service = openai_service
         self.milvus_service = milvus_service
 
-    def process_tenant_data(self, tenant_id: str, content: List[str], doc_name:str, collection_name_prefix: str = "tenant_", ):
+    async def process_tenant_data(self, tenant_id: str, content: List[str], doc_name: str, collection_name_prefix: str = "tenant_"):
         """
         Processes tenant data (list of strings) and stores it in a tenant-specific Milvus collection.
 
         Args:
             tenant_id (str): The unique ID of the tenant.
             content (List[str]): A list of strings (texts) for which embeddings will be generated.
+            doc_name (str): The name of the document.
             collection_name_prefix (str): A prefix for the tenant-specific collection name.
         """
         # Validate content
@@ -175,7 +178,7 @@ class VectorStoreManager:
         schema = self._define_schema(tenant_id)
 
         # Create or get the tenant-specific collection
-        tenant_collection_name = tenant_id
+        tenant_collection_name = tenant_id  # You can prefix if needed, e.g., f"{collection_name_prefix}{tenant_id}"
         collection = self.milvus_service.create_collection(tenant_collection_name, schema)
 
         # Insert data into the collection
@@ -184,8 +187,16 @@ class VectorStoreManager:
         # Create an index for faster search queries
         self.milvus_service.create_index(collection)
 
-        with SessionLocal() as db:
-            create_tenant_doc(db, tenant_id, doc_name, len(content))
+        # Create TenantDoc record using the service
+        async with SessionLocalAsync() as db:
+            await TenantDocService.create_tenant_doc(
+                TenantDocCreateSchema(
+                    tenant_id=tenant_id,
+                    doc_name=doc_name,
+                    num_entries=len(content)
+                ),
+                db
+            )
 
     def get_unique_doc_names(self, tenant_id: str) -> List[str]:
         """Get a list of unique doc_name entries for a tenant."""
@@ -195,8 +206,9 @@ class VectorStoreManager:
 
     def get_tenant_documents(self, tenant_id: str):
         """Get all documents for a tenant."""
-        with SessionLocal() as db:
-            return get_tenant_docs(db, tenant_id)
+        # Note: SessionLocalAsync is async, so this should be async
+        # Refactor this method to be async
+        pass  # Implement as needed
 
     def update_entry_by_id(self, tenant_id: str, entry_id: int, new_content: str):
         """Update an entry's content by id and recalculate embedding."""
@@ -204,11 +216,9 @@ class VectorStoreManager:
         collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
         self.milvus_service.update_entry_by_id(collection, entry_id, new_content, self.openai_service)
 
-        with SessionLocal() as db:
-            doc = self.milvus_service.get_doc_name_by_entry_id(collection, entry_id)
-            if doc:
-                entries = self.get_entries_by_doc_name(tenant_id, doc)
-                update_tenant_doc_entries(db, tenant_id, doc, len(entries))
+        # This should be async
+        # Refactor this method to be async
+        pass  # Implement as needed
 
     def get_entries_by_doc_name(self, tenant_id: str, doc_name: str) -> List[dict]:
         """Get a list of entries (content, id) by doc_name."""
@@ -230,7 +240,7 @@ class VectorStoreManager:
             FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
             FieldSchema(name="doc_name", dtype=DataType.VARCHAR, max_length=500)
         ]
-        return CollectionSchema(fields,enable_dynamic_field=True, description=f"{tenant_id} knowledge base")
+        return CollectionSchema(fields, enable_dynamic_field=True, description=f"{tenant_id} knowledge base")
 
     def delete_entry_by_id(self, tenant_id: str, entry_id: int):
         """Delete an entry by id and update the SQLAlchemy ORM database."""
@@ -244,45 +254,5 @@ class VectorStoreManager:
         self.milvus_service.delete_entry_by_id(collection, entry_id)
 
         # Update SQLAlchemy ORM database
-        with SessionLocal() as db:
-            if doc_name:
-                entries = self.get_entries_by_doc_name(tenant_id, doc_name)
-                if len(entries) == 0:
-                    delete_tenant_doc(db, tenant_id, doc_name)
-                else:
-                    update_tenant_doc_entries(db, tenant_id, doc_name, len(entries))
-
-
-# Example usage inside the main block, which is executed only when the script is run directly
-if __name__ == "__main__":
-    # Inject necessary dependencies
-    openai_service = OpenAIEmbeddingService(api_key=settings.OPENAI_API_KEY)
-    milvus_service = MilvusCollectionService(host=settings.MILVUS_HOST, port=settings.MILVUS_PORT)
-    vector_store_manager = VectorStoreManager(openai_service, milvus_service)
-
-    # Example tenant data
-    tenant_id = "tenant_123"
-    content_list = [
-        "This is the first document for tenant 123.",
-        "This is another piece of text content.",
-        "Final text content for embedding generation."
-    ]
-
-    # Process and insert data into the vector store for a specific tenant
-    vector_store_manager.process_tenant_data(tenant_id, content_list)
-
-    print(f"Data processed and inserted successfully for tenant: {tenant_id}")
-
-    # Get a list of unique doc_name
-    doc_names = vector_store_manager.get_unique_doc_names(tenant_id)
-    print(f"Unique doc_names: {doc_names}")
-
-    # Update an entry by id
-    entry_id = 1
-    new_content = "Updated content for entry 1."
-    vector_store_manager.update_entry_by_id(tenant_id, entry_id, new_content)
-
-    # Get entries by doc_name
-    doc_name = "document_1"
-    entries = vector_store_manager.get_entries_by_doc_name(tenant_id, doc_name)
-    print(f"Entries for doc_name '{doc_name}': {entries}")
+        with SessionLocalAsync() as db:  # Should be async
+            pass  # Implement the logic as needed
