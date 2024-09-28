@@ -191,17 +191,6 @@ class VectorStoreManager:
         # Create an index for faster search queries
         self.milvus_service.create_index(collection)
 
-        # # Create TenantDoc record using the service
-        # async with SessionLocalAsync() as db:
-        #     await TenantDocService.create_tenant_doc(
-        #         TenantDocCreateSchema(
-        #             tenant_id=tenant_id,
-        #             doc_name=doc_name,
-        #             num_entries=len(content)
-        #         ),
-        #         db
-        #     )
-
 
     def update_entry_by_id(self, tenant_id: str, entry_id: int, new_content: str):
         """Update an entry's content by id and recalculate embedding."""
