@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel
 from typing import List, Optional
@@ -67,6 +69,11 @@ async def get_entries_by_doc_name(
 ):
     try:
         entries = vector_store_manager.get_entries_by_doc_name(tenantId, docName)
+        logging.info({
+            "tenantId": tenantId,
+            "docName": docName,
+            "entries": entries
+        })
         return {
             "tenantId": tenantId,
             "docName": docName,
