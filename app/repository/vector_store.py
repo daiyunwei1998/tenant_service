@@ -139,11 +139,14 @@ class MilvusCollectionService:
             # Generate new embedding for the updated content
             new_embedding = openai_service.get_embeddings([new_content])[0]
 
-            # Update the entry in the collection
-            collection.update(
-                expr=f"id == {entry_id}",
-                data={"embedding": new_embedding, "content": new_content}
-            )
+            results = collection.query(expr=f"id == {entry_id}", output_fields=["doc_name"])
+            if not results:
+                raise RuntimeError(f"No entry found with id {entry_id}")
+            doc_name = results[0]["doc_name"]
+
+            # Upsert the new data
+            data_to_upsert = [[entry_id], [new_embedding], [new_content], [doc_name]]
+            collection.upsert(data=data_to_upsert)
             collection.flush()
 
             print(f"Entry with id {entry_id} updated successfully.")
@@ -199,17 +202,6 @@ class VectorStoreManager:
                 db
             )
 
-    def get_unique_doc_names(self, tenant_id: str) -> List[str]:
-        """Get a list of unique doc_name entries for a tenant."""
-        tenant_collection_name = tenant_id
-        collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
-        return self.milvus_service.get_unique_doc_names(collection)
-
-    def get_tenant_documents(self, tenant_id: str):
-        """Get all documents for a tenant."""
-        # Note: SessionLocalAsync is async, so this should be async
-        # Refactor this method to be async
-        pass  # Implement as needed
 
     def update_entry_by_id(self, tenant_id: str, entry_id: int, new_content: str):
         """Update an entry's content by id and recalculate embedding."""
