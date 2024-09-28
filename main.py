@@ -2,20 +2,18 @@
 
 import logging
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Query
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.future import select
-from sqlalchemy import inspect
 
 from databases import Database
 
 from app.core.config import settings
+from app.dependencies import get_db
 from app.exceptions.tenant_exceptions import DuplicateTenantNameException, DuplicateTenantAliasException
 from app.models.tenant import Tenant, Base
-from app.models.tenant_doc import TenantDoc
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema
 from app.services.image_upload import upload_to_s3
 from app.services.tenant_service import TenantService
@@ -50,13 +48,6 @@ SessionLocal = sessionmaker(
     expire_on_commit=False
 )
 
-# Dependency for creating async database sessions
-async def get_db() -> AsyncSession:
-    async with SessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 # Startup event to connect to the database and create tables
 @app.on_event("startup")

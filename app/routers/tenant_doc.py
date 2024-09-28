@@ -5,9 +5,10 @@ from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.dependencies import get_db
 from app.schemas.tenant_doc_schema import TenantDocCreateSchema, TenantDocUpdateSchema, TenantDocInfoSchema
 from app.services.tenant_doc_service import TenantDocService
-from main import get_db
+
 
 router = APIRouter(
     prefix="/api/v1/tenant_docs",
