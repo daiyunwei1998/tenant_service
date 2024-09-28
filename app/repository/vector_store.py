@@ -36,6 +36,7 @@ class MilvusCollectionService:
             print(f"Collection '{name}' created successfully.")
         else:
             collection = Collection(name=name)  # Load the existing collection
+            self.load_collection(collection)
             print(f"Collection '{name}' already exists.")
         return collection
 
