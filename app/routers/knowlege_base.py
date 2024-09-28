@@ -5,6 +5,7 @@ from typing import List, Optional
 from app.core.config import settings
 # Assuming the VectorStoreManager and other dependencies are already defined
 from app.repository.vector_store import VectorStoreManager, OpenAIEmbeddingService, MilvusCollectionService
+from app.routers.tenant_doc import get_tenant_docs
 
 # Create a router instance for knowledge_base
 router = APIRouter(
@@ -25,7 +26,7 @@ class UpdateContentRequest(BaseModel):
 
 class DocNamesResponse(BaseModel):
     tenantId: str
-    docNames: List[str]
+    docNames: List[str] = []
 
 
 class UpdateResponse(BaseModel):
@@ -47,7 +48,7 @@ async def get_unique_doc_names_with_paging(
    ):
     try:
         # Fetch paginated doc_names using the limit and last_doc_name marker
-        doc_names = vector_store_manager.get_tenant_documents(tenantId)
+        doc_names = get_tenant_docs(tenantId)
         return {"tenantId": tenantId, "docNames": doc_names}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
