@@ -80,7 +80,7 @@ def send_rabbitmq_message(queue_name, message):
             connection.close()
 
 @celery_app.task
-def process_file(file_path: str, tenant_id: str):
+async def process_file(file_path: str, tenant_id: str):
     """
     Celery task to process a file asynchronously.
     """
