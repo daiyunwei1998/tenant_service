@@ -72,7 +72,7 @@ def send_rabbitmq_message(queue_name, message):
             connection.close()
 
 @celery_app.task
-def process_file(file_path: str, tenant_id: str):
+async def process_file(file_path: str, tenant_id: str):
     status = "success"
     number_of_entries = 0
     error_message = ""
@@ -81,7 +81,7 @@ def process_file(file_path: str, tenant_id: str):
         texts = KnowledgeBaseService.process_file(file_path)
         number_of_entries = len(texts)  # Calculate the number of entries processed
 
-        vector_store_manager.process_tenant_data(tenant_id, texts, os.path.basename(file_path))
+        await vector_store_manager.process_tenant_data(tenant_id, texts, os.path.basename(file_path))
 
         logging.info(f"Processing completed for tenant {tenant_id}, file: {file_path}, entries processed: {number_of_entries}")
 
