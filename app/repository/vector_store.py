@@ -139,16 +139,26 @@ class MilvusCollectionService:
         try:
             # Generate new embedding for the updated content
             new_embedding = openai_service.get_embeddings([new_content])[0]
-            logging.error(collection.schema)
 
+            # Retrieve the existing entry to get the 'doc_name'
             results = collection.query(expr=f"id == {entry_id}", output_fields=["doc_name"])
             if not results:
                 raise RuntimeError(f"No entry found with id {entry_id}")
             doc_name = results[0]["doc_name"]
 
-            # Upsert the new data
-            data_to_upsert = [[entry_id], [new_embedding], [new_content], [doc_name]]
-            collection.upsert(data=data_to_upsert)
+            # Delete the existing entry by 'id'
+            collection.delete(expr=f"id == {entry_id}")
+            collection.flush()
+
+            # Prepare the new data without the 'id' field
+            data_to_insert = [
+                [new_embedding],  # embedding
+                [new_content],  # content
+                [doc_name]  # doc_name
+            ]
+
+            # Insert the new data
+            collection.insert(data=data_to_insert)
             collection.flush()
 
             logging.info(f"Entry with id {entry_id} updated successfully.")
