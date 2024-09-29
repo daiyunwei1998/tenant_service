@@ -31,7 +31,7 @@ class UsageService:
 
         # Exclude today's data by setting end_date to start of today
         now = datetime.now(timezone.utc)
-        start_of_today = datetime(year, month, now.day, tzinfo=timezone.utc)
+        start_of_today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
         if end_date > start_of_today:
             end_date = start_of_today - timedelta(seconds=1)
 
@@ -63,7 +63,7 @@ class UsageService:
 
         # Exclude today's data by setting end_date to start of today
         now = datetime.now(timezone.utc)
-        start_of_today = datetime(year, month, now.day, tzinfo=timezone.utc)
+        start_of_today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
         if end_date > start_of_today:
             end_date = start_of_today - timedelta(seconds=1)
 

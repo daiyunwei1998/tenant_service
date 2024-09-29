@@ -8,7 +8,7 @@ from app.repository.database_async import get_db_async
 import logging
 
 router = APIRouter(
-    prefix="/aggregation",
+    prefix="/api/v1/aggregation",
     tags=["Aggregation"],
 )
 
@@ -31,7 +31,7 @@ async def get_real_time_monthly_aggregation(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
-    service = UsageService(tenant_id)
+    service = UsageService(tenant_id)  # Correct instantiation
     try:
         aggregation = await service.get_combined_monthly_aggregation(db)
         return aggregation

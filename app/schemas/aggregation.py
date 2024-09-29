@@ -1,15 +1,17 @@
 # app/schemas/aggregation.py
 
 from pydantic import BaseModel
-from typing import Optional
 
 class MonthlyAggregation(BaseModel):
     tenant_id: str
     year: int
     month: int
-    total_tokens_used: int
-    total_replies: int
-    average_tokens_per_reply: float
+    total_tokens_used_mysql: int
+    total_price_mysql: float
+    total_tokens_used_mongodb: int
+    total_price_mongodb: float
+    combined_total_tokens: int
+    combined_total_price: float
 
     class Config:
         orm_mode = True
