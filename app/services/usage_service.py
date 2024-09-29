@@ -1,12 +1,16 @@
 # app/services/usage_service.py
+
 import logging
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.central_usage import CentralUsage
-from app.schemas.usage import UsageRead, TotalUsage, UsageCreate, MonthlySummary
+from app.schemas.aggregation import MonthlyAggregation
+from app.schemas.usage import UsageRead, UsageCreate, MonthlySummary
 from sqlalchemy.exc import SQLAlchemyError
+
+from app.services.mongodb_service import mongodb_service
 
 
 class UsageService:
@@ -16,13 +20,20 @@ class UsageService:
     async def get_monthly_usage(self, db: AsyncSession, year: int, month: int) -> List[UsageRead]:
         """
         Retrieves all billing records for the specified tenant and billing month.
+        Excludes today's data.
         """
         # Calculate the start and end dates of the billing month
-        start_date = datetime(year, month, 1)
+        start_date = datetime(year, month, 1, tzinfo=timezone.utc)
         if month == 12:
-            end_date = datetime(year + 1, 1, 1) - timedelta(seconds=1)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
         else:
-            end_date = datetime(year, month + 1, 1) - timedelta(seconds=1)
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+
+        # Exclude today's data by setting end_date to start of today
+        now = datetime.now(timezone.utc)
+        start_of_today = datetime(year, month, now.day, tzinfo=timezone.utc)
+        if end_date > start_of_today:
+            end_date = start_of_today - timedelta(seconds=1)
 
         stmt = select(CentralUsage).where(
             CentralUsage.tenant_id == self.tenant_id,
@@ -41,13 +52,20 @@ class UsageService:
     async def get_monthly_summary(self, db: AsyncSession, year: int, month: int) -> MonthlySummary:
         """
         Calculates the total tokens used and total price for the specified tenant and billing month.
+        Excludes today's data.
         """
         # Calculate the start and end dates of the billing month
-        start_date = datetime(year, month, 1)
+        start_date = datetime(year, month, 1, tzinfo=timezone.utc)
         if month == 12:
-            end_date = datetime(year + 1, 1, 1) - timedelta(seconds=1)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
         else:
-            end_date = datetime(year, month + 1, 1) - timedelta(seconds=1)
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+
+        # Exclude today's data by setting end_date to start of today
+        now = datetime.now(timezone.utc)
+        start_of_today = datetime(year, month, now.day, tzinfo=timezone.utc)
+        if end_date > start_of_today:
+            end_date = start_of_today - timedelta(seconds=1)
 
         stmt = select(
             func.sum(CentralUsage.tokens_used).label("total_tokens"),
@@ -105,3 +123,41 @@ class UsageService:
             await db.rollback()
             logging.error(f"Error inserting usage record for tenant {self.tenant_id}: {e}")
             raise e
+
+    async def get_combined_monthly_aggregation(self, db: AsyncSession) -> MonthlyAggregation:
+        """
+        Combines usage data from MySQL and MongoDB for the current billing month.
+
+        :param db: The asynchronous database session.
+        :return: A MonthlyAggregation object containing combined data.
+        """
+        now = datetime.now(timezone.utc)
+        year = now.year
+        month = now.month
+
+        # Aggregate previous data from MySQL
+        summary = await self.get_monthly_summary(db, year, month)
+        total_tokens_mysql = summary.total_tokens_used
+        total_price_mysql = summary.total_price
+
+        # Aggregate today's data from MongoDB
+        total_tokens_mongodb, total_price_mongodb = await mongodb_service.aggregate_todays_data(self.tenant_id)
+
+        # Calculate combined totals
+        combined_total_tokens = total_tokens_mysql + total_tokens_mongodb
+        combined_total_price = total_price_mysql + total_price_mongodb
+
+        # Create MonthlyAggregation instance
+        aggregation = MonthlyAggregation(
+            tenant_id=self.tenant_id,
+            year=year,
+            month=month,
+            total_tokens_used_mysql=total_tokens_mysql,
+            total_price_mysql=total_price_mysql,
+            total_tokens_used_mongodb=total_tokens_mongodb,
+            total_price_mongodb=total_price_mongodb,
+            combined_total_tokens=combined_total_tokens,
+            combined_total_price=combined_total_price
+        )
+
+        return aggregation

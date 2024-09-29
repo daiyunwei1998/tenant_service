@@ -30,6 +30,7 @@ app.include_router(upload_router, prefix="/files")
 app.include_router(knowlege_base_router)
 app.include_router(tenant_doc_router)
 app.include_router(usage_router.router)
+app.include_router(aggregation_router.router) 
 
 # CORS Middleware
 app.add_middleware(
