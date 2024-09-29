@@ -188,6 +188,7 @@ class VectorStoreManager:
             raise ValueError("Content must be a non-empty list of strings.")
 
         # Generate embeddings for the provided content
+        logging.debug("process_tenant_data: generating embeddings")
         embeddings = self.openai_service.get_embeddings(content)
 
         # Define the schema for this tenant's collection
@@ -198,9 +199,11 @@ class VectorStoreManager:
         collection = self.milvus_service.create_collection(tenant_collection_name, schema)
 
         # Insert data into the collection
+        logging.debug("process_tenant_data:  inserting data")
         self.milvus_service.insert_data(collection, embeddings, content, doc_name)
 
         # Create an index for faster search queries
+        logging.debug("process_tenant_data:  creating index")
         self.milvus_service.create_index(collection)
 
 
