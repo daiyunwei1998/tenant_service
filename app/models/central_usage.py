@@ -1,10 +1,9 @@
 # app/models/central_usage.py
 
 from sqlalchemy import Column, Integer, String, DateTime, Float, Index
-from sqlalchemy.ext.declarative import declarative_base
+from app.models import Base
 from datetime import datetime
 
-Base = declarative_base()
 
 class CentralUsage(Base):
     __tablename__ = "tenant_usages"
