@@ -3,12 +3,17 @@
 import json
 import logging
 from typing import List, Optional
+
+from fastapi import HTTPException
 from openai import OpenAI
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.core.config import settings
 from app.dependencies import SessionLocalAsync
 from app.services.tenant_doc_service import TenantDocService
-from app.schemas.tenant_doc_schema import TenantDocCreateSchema
+from app.schemas.tenant_doc_schema import TenantDocCreateSchema, TenantDocUpdateSchema
+
 
 class OpenAIEmbeddingService:
     """Service class for handling OpenAI embedding generation."""
@@ -246,9 +251,21 @@ class VectorStoreManager:
         tenant_collection_name = tenant_id
         collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
 
+        # Retrieve the doc_name associated with the entry_id
+        doc_name = self.milvus_service.get_doc_name_by_entry_id(collection, entry_id)
+        if not doc_name:
+            raise HTTPException(status_code=404, detail=f"Doc name for entry_id {entry_id} not found.")
+
         # Delete the entry from Milvus
         self.milvus_service.delete_entry_by_id(collection, entry_id)
 
         # Update SQLAlchemy ORM database
-        async with SessionLocalAsync() as db:  # Should be async
-            pass  # Implement the logic as needed
+        async with SessionLocalAsync() as db:
+            try:
+                # Attempt to decrement the num_entries
+                update_data = TenantDocUpdateSchema(num_entries=-1)
+                await TenantDocService.decrement_tenant_doc_entries(tenant_id, doc_name, update_data, db)
+            except SQLAlchemyError as e:
+                # Log the error and raise an HTTP exception
+                logging.error(f"Database error while deleting entry: {e}")
+                raise HTTPException(status_code=500, detail="Failed to update the database after deleting the entry.")
