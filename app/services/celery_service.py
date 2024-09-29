@@ -133,7 +133,7 @@ async def process_file(file_path: str, tenant_id: str):
 
     try:
         # Run the asynchronous processing within the Celery task
-        return asyncio.run(async_process())
+        return await async_process()
     except Exception as e:
         logger.error(f"Unexpected error in Celery task: {str(e)}")
         return f"Unexpected error: {str(e)}"
