@@ -127,9 +127,10 @@ class MilvusCollectionService:
     def delete_entry_by_id(self, collection: Collection, entry_id: int):
         """Delete an entry by its id."""
         try:
+            logging.info(f"deleting vector db entry by id {entry_id}")
             collection.delete(f"id == {entry_id}")
             collection.flush()
-            print(f"Entry with id {entry_id} deleted successfully.")
+            logging.info(f"Entry with id {entry_id} deleted successfully.")
         except Exception as e:
             raise RuntimeError(f"Failed to delete entry with id {entry_id}: {e}")
 
@@ -244,9 +245,6 @@ class VectorStoreManager:
         """Delete an entry by id and update the SQLAlchemy ORM database."""
         tenant_collection_name = tenant_id
         collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
-
-        # Get the doc_name before deleting the entry
-        doc_name = self.milvus_service.get_doc_name_by_entry_id(collection, entry_id)
 
         # Delete the entry from Milvus
         self.milvus_service.delete_entry_by_id(collection, entry_id)
