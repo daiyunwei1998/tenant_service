@@ -173,7 +173,7 @@ class VectorStoreManager:
         self.openai_service = openai_service
         self.milvus_service = milvus_service
 
-    async def process_tenant_data(self, tenant_id: str, content: List[str], doc_name: str, collection_name_prefix: str = "tenant_"):
+    def process_tenant_data(self, tenant_id: str, content: List[str], doc_name: str, collection_name_prefix: str = "tenant_"):
         """
         Processes tenant data (list of strings) and stores it in a tenant-specific Milvus collection.
 
