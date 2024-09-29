@@ -37,10 +37,14 @@ class UpdateResponse(BaseModel):
     message: str
 
 
+class Entry(BaseModel):
+    id: str
+    content: str
+
 class EntriesByDocNameResponse(BaseModel):
     tenantId: str
     docName: str
-    entries: List[dict]
+    entries: List[Entry]
 
 # Update an entry's content identified by ID
 @router.put("/{tenantId}/entries/{entryId}", response_model=UpdateResponse)
@@ -69,11 +73,8 @@ async def get_entries_by_doc_name(
 ):
     try:
         entries = vector_store_manager.get_entries_by_doc_name(tenantId, docName)
-        logging.info({
-            "tenantId": tenantId,
-            "docName": docName,
-            "entries": entries
-        })
+        for entry in entries:
+            entry['id'] = str(entry['id'])
         return {
             "tenantId": tenantId,
             "docName": docName,
