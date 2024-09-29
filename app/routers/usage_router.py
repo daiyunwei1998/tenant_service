@@ -10,7 +10,7 @@ from app.schemas.usage import UsageRead, TotalUsage, UsageCreate
 
 
 router = APIRouter(
-    prefix="/usage",
+    prefix="/api/v1/usage",
     tags=["Usage"],
 )
 
