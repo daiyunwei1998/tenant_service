@@ -21,3 +21,4 @@ pymilvus
 openai
 asgiref
 aio-pika
+gevent
