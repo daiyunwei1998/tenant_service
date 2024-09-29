@@ -55,7 +55,7 @@ async def async_process(file_path: str, tenant_id: str):
     async with SessionLocalAsync() as session:
         try:
             # Process the file with KnowledgeBaseService
-            texts = await KnowledgeBaseService.process_file(file_path)
+            texts = KnowledgeBaseService.process_file(file_path)
             await vector_store_manager.process_tenant_data(
                 tenant_id, texts, os.path.basename(file_path)
             )
