@@ -5,7 +5,13 @@ on:
       - dev
     paths:
       - '**'  # This will trigger on any file change in the repo
+  pull_request:
+    types:
+      - closed
+    branches:
+      - dev
   workflow_dispatch:
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
