@@ -87,10 +87,10 @@ async def get_entries_by_doc_name(
 @router.delete("/{tenantId}/entries/{entryId}", response_model=dict)
 async def delete_entry_by_id(
     tenantId: str = Path(..., description="The unique ID of the tenant"),
-    entryId: int = Path(..., description="The unique ID of the entry to be deleted")
+    entryId: str = Path(..., description="The unique ID of the entry to be deleted")
 ):
     try:
-        vector_store_manager.delete_entry_by_id(tenantId, entryId)
+        vector_store_manager.delete_entry_by_id(tenantId, int(entryId))
         return {
             "tenantId": tenantId,
             "entryId": entryId,
