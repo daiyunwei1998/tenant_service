@@ -1,6 +1,7 @@
 # app/repository/vector_store.py
 
 import json
+import logging
 from typing import List, Optional
 from openai import OpenAI
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
@@ -138,6 +139,7 @@ class MilvusCollectionService:
         try:
             # Generate new embedding for the updated content
             new_embedding = openai_service.get_embeddings([new_content])[0]
+            logging.error(collection.schema)
 
             results = collection.query(expr=f"id == {entry_id}", output_fields=["doc_name"])
             if not results:
@@ -149,7 +151,7 @@ class MilvusCollectionService:
             collection.upsert(data=data_to_upsert)
             collection.flush()
 
-            print(f"Entry with id {entry_id} updated successfully.")
+            logging.info(f"Entry with id {entry_id} updated successfully.")
         except Exception as e:
             raise RuntimeError(f"Failed to update entry by id: {e}")
 
