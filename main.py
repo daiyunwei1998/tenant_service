@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.dependencies import get_db
 from app.exceptions.tenant_exceptions import DuplicateTenantNameException, DuplicateTenantAliasException
 from app.models.tenant import Tenant, Base
+from app.routers import usage_router
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema
 from app.services.image_upload import upload_to_s3
 from app.services.task_complete_message_handler import start_message_handler
@@ -28,6 +29,7 @@ app = FastAPI()
 app.include_router(upload_router, prefix="/files")
 app.include_router(knowlege_base_router)
 app.include_router(tenant_doc_router)
+app.include_router(usage_router.router)
 
 # CORS Middleware
 app.add_middleware(
