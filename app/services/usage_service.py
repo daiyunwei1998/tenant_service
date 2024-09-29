@@ -43,6 +43,7 @@ class UsageService:
     async def get_monthly_summary(self, db: AsyncSession, year: int, month: int) -> MonthlySummary:
         """
         Calculates the total tokens used and total price for the specified tenant and billing month, including today.
+        Returns 0 for tokens and price if no data is found.
         """
         start_date = datetime(year, month, 1, tzinfo=timezone.utc)
         if month == 12:
@@ -67,6 +68,8 @@ class UsageService:
 
             # Aggregate additional data from MongoDB
             mongo_tokens, mongo_price = await mongodb_service.aggregate_monthly_data(self.tenant_id, year, month)
+            mongo_tokens = mongo_tokens or 0
+            mongo_price = mongo_price or 0.0
 
             total_tokens += mongo_tokens
             total_price += mongo_price
@@ -86,6 +89,7 @@ class UsageService:
     async def get_combined_daily_usage(self, db: AsyncSession, year: int, month: int) -> List[DailySummary]:
         """
         Retrieves daily usage records for the specified tenant and billing month, combining MySQL and MongoDB data.
+        Ensures that all dates in the month are present, with 0 tokens and price for dates with no data.
         """
         # Define the start and end dates of the month
         start_date = date(year, month, 1)
@@ -127,22 +131,29 @@ class UsageService:
             # Fetch MongoDB data for missing dates
             mongo_data = await mongodb_service.aggregate_multiple_dates(self.tenant_id, missing_dates)
 
-            # Merge MongoDB data into mysql_data
+            # Initialize daily_data with all dates set to 0
+            daily_data: Dict[date, Dict[str, float]] = {
+                d: {"tokens_used": 0, "total_price": 0.0} for d in all_dates
+            }
+
+            # Populate daily_data with MySQL data
+            for d, data in mysql_data.items():
+                daily_data[d]["tokens_used"] += data["tokens_used"]
+                daily_data[d]["total_price"] += data["total_price"]
+
+            # Populate daily_data with MongoDB data
             for d, data in mongo_data.items():
-                if d in mysql_data:
-                    mysql_data[d]["tokens_used"] += data["tokens_used"]
-                    mysql_data[d]["total_price"] += data["total_price"]
-                else:
-                    mysql_data[d] = data
+                daily_data[d]["tokens_used"] += data["tokens_used"]
+                daily_data[d]["total_price"] += data["total_price"]
 
             # Convert the data into a list of DailySummary
             daily_summaries = [
                 DailySummary(
                     date=datetime.combine(d, datetime.min.time()).replace(tzinfo=timezone.utc),
-                    tokens_used=int(data["tokens_used"]),
-                    total_price=float(data["total_price"])
+                    tokens_used=int(daily_data[d]["tokens_used"]),
+                    total_price=float(daily_data[d]["total_price"])
                 )
-                for d, data in sorted(mysql_data.items())
+                for d in sorted(all_dates)
             ]
 
             return daily_summaries
