@@ -2,7 +2,7 @@
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone, timedelta, date
-from typing import Optional, List, Dict
+from typing import List, Dict
 from bson import ObjectId
 
 from app.core.config import settings
@@ -19,7 +19,7 @@ class MongoDBService:
 
     async def save_ai_reply(self, ai_reply: AIReply):
         collection = await self.get_tenant_collection(ai_reply.tenant_id)
-        result = await collection.insert_one(ai_reply.dict())
+        result = await collection.insert_one(ai_reply.model_dump())
         return str(result.inserted_id)
 
     async def update_feedback(self, reply_id: str, tenant_id: str, feedback: bool):
@@ -188,3 +188,5 @@ class MongoDBService:
 
     async def close_connection(self):
         self.client.close()
+
+mongodb_service = MongoDBService()

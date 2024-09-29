@@ -9,7 +9,7 @@ from app.models.central_usage import CentralUsage
 from app.schemas.usage import UsageRead, UsageCreate, MonthlySummary, DailySummary
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.services import mongodb_service
+from app.services.mongodb_service import mongodb_service
 
 
 class UsageService:
