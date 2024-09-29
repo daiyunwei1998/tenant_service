@@ -145,7 +145,7 @@ class MilvusCollectionService:
             doc_name = results[0]["doc_name"]
 
             # Upsert the new data
-            data_to_upsert = [[entry_id], [new_embedding], [new_content], [doc_name],[]]
+            data_to_upsert = [[entry_id], [new_embedding], [new_content], [doc_name]]
             collection.upsert(data=data_to_upsert)
             collection.flush()
 
