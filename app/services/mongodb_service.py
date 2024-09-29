@@ -1,14 +1,12 @@
 # app/services/mongodb_service.py
 
 from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from datetime import datetime, timezone, timedelta, date
+from typing import Optional, List, Dict
 from bson import ObjectId
 
 from app.core.config import settings
 from app.schemas.ai_reply import AIReply
-from app.schemas.aggregation import MonthlyAggregation
-
 
 class MongoDBService:
     def __init__(self):
@@ -82,9 +80,111 @@ class MongoDBService:
         data = aggregation_result[0]
         return data.get("total_tokens_used", 0), data.get("total_price", 0.0)
 
+    async def aggregate_monthly_data(self, tenant_id: str, year: int, month: int) -> (int, float):
+        """
+        Aggregates total tokens and total price for the specified month from MongoDB.
+
+        :param tenant_id: The tenant's unique identifier.
+        :param year: The billing year.
+        :param month: The billing month.
+        :return: A tuple containing total_tokens_used and total_price.
+        """
+        collection = await self.get_tenant_collection(tenant_id)
+
+        # Define start and end of the month in UTC
+        start_date = datetime(year, month, 1, tzinfo=timezone.utc)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+        else:
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+
+        pipeline = [
+            {
+                "$match": {
+                    "tenant_id": tenant_id,
+                    "created_at": {
+                        "$gte": start_date,
+                        "$lte": end_date
+                    }
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "total_tokens_used": {"$sum": "$total_tokens"},
+                    "total_price": {"$sum": {"$multiply": ["$total_tokens", "$per_token_price"]}}
+                }
+            }
+        ]
+
+        aggregation_result = await collection.aggregate(pipeline).to_list(length=1)
+
+        if not aggregation_result:
+            return 0, 0.0
+
+        data = aggregation_result[0]
+        return data.get("total_tokens_used", 0), data.get("total_price", 0.0)
+
+    async def aggregate_multiple_dates(self, tenant_id: str, dates: List[date]) -> Dict[date, Dict[str, float]]:
+        """
+        Aggregates total tokens and total price for multiple specific dates from MongoDB.
+
+        :param tenant_id: The tenant's unique identifier.
+        :param dates: List of dates to aggregate.
+        :return: A dictionary with date as key and a dict of tokens_used and total_price.
+        """
+        if not dates:
+            return {}
+
+        collection = await self.get_tenant_collection(tenant_id)
+
+        # Define start and end for each date
+        match_conditions = []
+        for d in dates:
+            start = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+            end = start + timedelta(days=1)
+            match_conditions.append({
+                "created_at": {
+                    "$gte": start,
+                    "$lt": end
+                }
+            })
+
+        pipeline = [
+            {
+                "$match": {
+                    "tenant_id": tenant_id,
+                    "$or": match_conditions
+                }
+            },
+            {
+                "$group": {
+                    "_id": {
+                        "year": {"$year": "$created_at"},
+                        "month": {"$month": "$created_at"},
+                        "day": {"$dayOfMonth": "$created_at"}
+                    },
+                    "total_tokens_used": {"$sum": "$total_tokens"},
+                    "total_price": {"$sum": {"$multiply": ["$total_tokens", "$per_token_price"]}}
+                }
+            }
+        ]
+
+        aggregation_result = await collection.aggregate(pipeline).to_list(length=None)
+
+        # Transform aggregation result into a dictionary
+        mongo_data: Dict[date, Dict[str, float]] = {}
+        for record in aggregation_result:
+            year = record["_id"]["year"]
+            month = record["_id"]["month"]
+            day = record["_id"]["day"]
+            d = date(year, month, day)
+            mongo_data[d] = {
+                "tokens_used": record.get("total_tokens_used", 0),
+                "total_price": record.get("total_price", 0.0)
+            }
+
+        return mongo_data
+
     async def close_connection(self):
         self.client.close()
-
-
-# Instantiate a global MongoDBService
-mongodb_service = MongoDBService()
