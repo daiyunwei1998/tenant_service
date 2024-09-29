@@ -241,7 +241,7 @@ class VectorStoreManager:
         ]
         return CollectionSchema(fields, description=f"{tenant_id} knowledge base")
 
-    def delete_entry_by_id(self, tenant_id: str, entry_id: int):
+    async def delete_entry_by_id(self, tenant_id: str, entry_id: int):
         """Delete an entry by id and update the SQLAlchemy ORM database."""
         tenant_collection_name = tenant_id
         collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))

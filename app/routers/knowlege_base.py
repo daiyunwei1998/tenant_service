@@ -90,7 +90,7 @@ async def delete_entry_by_id(
     entryId: str = Path(..., description="The unique ID of the entry to be deleted")
 ):
     try:
-        vector_store_manager.delete_entry_by_id(tenantId, int(entryId))
+        await vector_store_manager.delete_entry_by_id(tenantId, int(entryId))
         return {
             "tenantId": tenantId,
             "entryId": entryId,
