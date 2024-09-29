@@ -145,7 +145,7 @@ class MilvusCollectionService:
             doc_name = results[0]["doc_name"]
 
             # Upsert the new data
-            data_to_upsert = [[entry_id], [new_embedding], [new_content], [doc_name]]
+            data_to_upsert = [[entry_id], [new_embedding], [new_content], [doc_name],[]]
             collection.upsert(data=data_to_upsert)
             collection.flush()
 
@@ -222,7 +222,7 @@ class VectorStoreManager:
             FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
             FieldSchema(name="doc_name", dtype=DataType.VARCHAR, max_length=500)
         ]
-        return CollectionSchema(fields, enable_dynamic_field=True, description=f"{tenant_id} knowledge base")
+        return CollectionSchema(fields, description=f"{tenant_id} knowledge base")
 
     def delete_entry_by_id(self, tenant_id: str, entry_id: int):
         """Delete an entry by id and update the SQLAlchemy ORM database."""
