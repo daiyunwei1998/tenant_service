@@ -250,5 +250,5 @@ class VectorStoreManager:
         self.milvus_service.delete_entry_by_id(collection, entry_id)
 
         # Update SQLAlchemy ORM database
-        with SessionLocalAsync() as db:  # Should be async
+        async with SessionLocalAsync() as db:  # Should be async
             pass  # Implement the logic as needed
