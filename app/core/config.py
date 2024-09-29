@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     # embedding model
     embedding_model: str = "text-embedding-3-small"
 
+    # MongoDB
+    MONGO_HOST: str = os.getenv('MONGO_HOST', 'localhost')
+    MONGO_USERNAME: str = os.getenv('MONGO_USERNAME', 'default_username')
+    MONGO_PASSWORD: str = os.getenv('MONGO_PASSWORD', 'default_password')
+
+    MONGODB_URL: str = f"mongodb://{MONGO_USERNAME}:{MONGO_PASSWORD}@{MONGO_HOST}:27017/"
+
+    DATABASE_NAME: str = "ai_replies_db"
+
     @property
     def database_url(self):
         return f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}"

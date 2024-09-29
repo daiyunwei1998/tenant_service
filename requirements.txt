@@ -22,3 +22,4 @@ openai
 asgiref
 aio-pika
 gevent
+motor
