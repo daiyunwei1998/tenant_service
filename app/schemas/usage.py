@@ -13,7 +13,7 @@ class UsageCreate(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "date": "2024-04-26T00:00:00Z",
+                "date": "2024-09-15T00:00:00Z",
                 "tokens_used": 1500,
                 "per_token_price": 0.01
             }
