@@ -1,3 +1,5 @@
+import asyncio
+
 import pika
 import json
 from celery import Celery
@@ -72,7 +74,7 @@ def send_rabbitmq_message(queue_name, message):
             connection.close()
 
 @celery_app.task
-async def process_file(file_path: str, tenant_id: str):
+def process_file(file_path: str, tenant_id: str):
     status = "success"
     number_of_entries = 0
     error_message = ""
@@ -81,7 +83,11 @@ async def process_file(file_path: str, tenant_id: str):
         texts = KnowledgeBaseService.process_file(file_path)
         number_of_entries = len(texts)  # Calculate the number of entries processed
 
-        await vector_store_manager.process_tenant_data(tenant_id, texts, os.path.basename(file_path))
+        asyncio.run(
+            vector_store_manager.process_tenant_data(
+                tenant_id, texts, os.path.basename(file_path)
+            )
+        )
 
         logging.info(f"Processing completed for tenant {tenant_id}, file: {file_path}, entries processed: {number_of_entries}")
 
