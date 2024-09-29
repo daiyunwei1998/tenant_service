@@ -20,3 +20,4 @@ openparse
 pymilvus
 openai
 asgiref
+aio-pika
