@@ -1,7 +1,8 @@
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
 from pathlib import Path
 from datetime import datetime
-from app.services.celery_service import process_file  # Adjust the import path if necessary
+
+from app.services.parser_service import process_file
 
 router = APIRouter()
 

@@ -83,3 +83,18 @@ async def get_entries_by_doc_name(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Delete an entry identified by ID
+@router.delete("/{tenantId}/entries/{entryId}", response_model=dict)
+async def delete_entry_by_id(
+    tenantId: str = Path(..., description="The unique ID of the tenant"),
+    entryId: int = Path(..., description="The unique ID of the entry to be deleted")
+):
+    try:
+        vector_store_manager.delete_entry_by_id(tenantId, entryId)
+        return {
+            "tenantId": tenantId,
+            "entryId": entryId,
+            "message": "Entry deleted successfully."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
