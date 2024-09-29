@@ -10,7 +10,7 @@ class CentralUsage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(DateTime, nullable=False, index=True)
-    tenant_id = Column(String, nullable=False, index=True)
+    tenant_id = Column(String(255), nullable=False, index=True)
     tokens_used = Column(Integer, nullable=False)
     per_token_price = Column(Float, nullable=False)
     total_price = Column(Float, nullable=False)
