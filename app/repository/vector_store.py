@@ -188,8 +188,9 @@ class VectorStoreManager:
             raise ValueError("Content must be a non-empty list of strings.")
 
         # Generate embeddings for the provided content
-        logging.debug("process_tenant_data: generating embeddings")
         embeddings = self.openai_service.get_embeddings(content)
+        logging.debug(
+            f"Generated {len(embeddings)} embeddings with dimensions {len(embeddings[0]) if embeddings else 0}")
 
         # Define the schema for this tenant's collection
         schema = self._define_schema(tenant_id)
