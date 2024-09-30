@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional, Dict
 
-from openai.types import Completion
 from pydantic import BaseModel
 
 class TokenInfo(BaseModel):
@@ -19,7 +18,7 @@ class AIReply(BaseModel):
     created_at: datetime = datetime.now(timezone.utc)
 
     @classmethod
-    def from_openai_completion(cls, receiver: str, user_query: str, completion: Completion | str, tenant_id: str,
+    def from_openai_completion(cls, receiver: str, user_query: str, completion, tenant_id: str,
                                input_token_price: float, output_token_price: float):
         # Extract token usage
         usage = completion.usage

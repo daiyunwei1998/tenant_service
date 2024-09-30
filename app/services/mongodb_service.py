@@ -1,5 +1,3 @@
-# app/services/mongodb_service.py
-
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone, timedelta, date
 from typing import List, Dict
@@ -56,7 +54,6 @@ class MongoDBService:
         pipeline = [
             {
                 "$match": {
-                    "tenant_id": tenant_id,
                     "created_at": {
                         "$gte": start_of_today,
                         "$lt": start_of_tomorrow
@@ -64,10 +61,30 @@ class MongoDBService:
                 }
             },
             {
+                "$project": {
+                    "total_tokens": 1,
+                    "document_total_price": {
+                        "$reduce": {
+                            "input": {
+                                "$map": {
+                                    "input": {"$objectToArray": "$tokens"},
+                                    "as": "token",
+                                    "in": {
+                                        "$multiply": ["$$token.v.count", "$$token.v.price_per_token"]
+                                    }
+                                }
+                            },
+                            "initialValue": 0,
+                            "in": {"$add": ["$$value", "$$this"]}
+                        }
+                    }
+                }
+            },
+            {
                 "$group": {
                     "_id": None,
                     "total_tokens_used": {"$sum": "$total_tokens"},
-                    "total_price": {"$sum": {"$multiply": ["$total_tokens", "$per_token_price"]}}
+                    "total_price": {"$sum": "$document_total_price"}
                 }
             }
         ]
@@ -94,17 +111,36 @@ class MongoDBService:
         # Define start and end of the month in UTC
         start_date = datetime(year, month, 1, tzinfo=timezone.utc)
         if month == 12:
-            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
         else:
-            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc)
 
         pipeline = [
             {
                 "$match": {
-                    "tenant_id": tenant_id,
                     "created_at": {
                         "$gte": start_date,
-                        "$lte": end_date
+                        "$lt": end_date
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "total_tokens": 1,
+                    "document_total_price": {
+                        "$reduce": {
+                            "input": {
+                                "$map": {
+                                    "input": {"$objectToArray": "$tokens"},
+                                    "as": "token",
+                                    "in": {
+                                        "$multiply": ["$$token.v.count", "$$token.v.price_per_token"]
+                                    }
+                                }
+                            },
+                            "initialValue": 0,
+                            "in": {"$add": ["$$value", "$$this"]}
+                        }
                     }
                 }
             },
@@ -112,7 +148,7 @@ class MongoDBService:
                 "$group": {
                     "_id": None,
                     "total_tokens_used": {"$sum": "$total_tokens"},
-                    "total_price": {"$sum": {"$multiply": ["$total_tokens", "$per_token_price"]}}
+                    "total_price": {"$sum": "$document_total_price"}
                 }
             }
         ]
@@ -138,7 +174,7 @@ class MongoDBService:
 
         collection = await self.get_tenant_collection(tenant_id)
 
-        # Define start and end for each date
+        # Build match conditions for each date
         match_conditions = []
         for d in dates:
             start = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
@@ -153,8 +189,28 @@ class MongoDBService:
         pipeline = [
             {
                 "$match": {
-                    "tenant_id": tenant_id,
                     "$or": match_conditions
+                }
+            },
+            {
+                "$project": {
+                    "created_at": 1,
+                    "total_tokens": 1,
+                    "document_total_price": {
+                        "$reduce": {
+                            "input": {
+                                "$map": {
+                                    "input": {"$objectToArray": "$tokens"},
+                                    "as": "token",
+                                    "in": {
+                                        "$multiply": ["$$token.v.count", "$$token.v.price_per_token"]
+                                    }
+                                }
+                            },
+                            "initialValue": 0,
+                            "in": {"$add": ["$$value", "$$this"]}
+                        }
+                    }
                 }
             },
             {
@@ -165,7 +221,7 @@ class MongoDBService:
                         "day": {"$dayOfMonth": "$created_at"}
                     },
                     "total_tokens_used": {"$sum": "$total_tokens"},
-                    "total_price": {"$sum": {"$multiply": ["$total_tokens", "$per_token_price"]}}
+                    "total_price": {"$sum": "$document_total_price"}
                 }
             }
         ]
@@ -173,12 +229,12 @@ class MongoDBService:
         aggregation_result = await collection.aggregate(pipeline).to_list(length=None)
 
         # Transform aggregation result into a dictionary
-        mongo_data: Dict[str, Dict[str, float]] = {}
+        mongo_data: Dict[date, Dict[str, float]] = {}
         for record in aggregation_result:
             year = record["_id"]["year"]
             month = record["_id"]["month"]
             day = record["_id"]["day"]
-            # Format date as 'YYYY-MM-DD'
+            # Create date object
             d = date(year, month, day)
             mongo_data[d] = {
                 "tokens_used": record.get("total_tokens_used", 0),
@@ -190,15 +246,14 @@ class MongoDBService:
     async def get_data_for_date_range(self, tenant_id: str, start_date: datetime, end_date: datetime):
         collection = await self.get_tenant_collection(tenant_id)
         cursor = collection.find({
-            "tenant_id": tenant_id,
             "created_at": {
                 "$gte": start_date,
-                "$lte": end_date
+                "$lt": end_date
             }
         }, {
             "created_at": 1,
             "total_tokens": 1,
-            "per_token_price": 1
+            "tokens": 1  # Include tokens field to access price information
         })
         records = await cursor.to_list(length=None)
         return records
