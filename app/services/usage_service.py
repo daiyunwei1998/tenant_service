@@ -149,7 +149,7 @@ class UsageService:
             # Convert the data into a list of DailySummary
             daily_summaries = [
                 DailySummary(
-                    date=datetime.combine(d, datetime.min.time()).replace(tzinfo=timezone.utc),
+                    date=d.strftime("%Y-%m-%d"),
                     tokens_used=int(daily_data[d]["tokens_used"]),
                     total_price=float(daily_data[d]["total_price"])
                 )

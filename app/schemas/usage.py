@@ -30,7 +30,7 @@ class MonthlySummary(BaseModel):
         orm_mode = True
 
 class DailySummary(BaseModel):
-    date: datetime
+    date: str
     tokens_used: int
     total_price: float
 
