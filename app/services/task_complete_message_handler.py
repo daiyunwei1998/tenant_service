@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.dependencies import get_db
 from app.routers.tenant_doc import create_tenant_doc
 from app.schemas.tenant_doc_schema import TenantDocCreateSchema
+from app.services.tenant_doc_service import TenantDocService
 
 # config
 rabbitmq_username = settings.RABBITMQ_USERNAME
@@ -42,7 +43,7 @@ async def process_message(message: IncomingMessage):
                         num_entries=number_of_entries
                     )
                     # Call create_tenant_doc with the session
-                    await create_tenant_doc(tenant_doc=tenant_doc_data, db=db)
+                    await TenantDocService.create_tenant_doc(tenant_doc_data, db)
                 logging.info(f"Tenant document created in database for tenant '{tenant_id}'.")
             else:
                 logging.error(error)
