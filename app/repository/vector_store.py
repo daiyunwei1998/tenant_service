@@ -3,7 +3,7 @@
 import json
 import logging
 from typing import List, Optional
-
+from asyncio import Lock
 from fastapi import HTTPException
 from openai import OpenAI
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
@@ -192,6 +192,14 @@ class VectorStoreManager:
     def __init__(self, openai_service: OpenAIEmbeddingService, milvus_service: MilvusCollectionService):
         self.openai_service = openai_service
         self.milvus_service = milvus_service
+        self.locks = {}  # Dictionary to hold locks for each entry_id
+        self.global_lock = Lock()
+
+    async def get_lock(self, entry_id: int) -> Lock:
+        async with self.global_lock:
+            if entry_id not in self.locks:
+                self.locks[entry_id] = Lock()
+            return self.locks[entry_id]
 
     def process_tenant_data(self, tenant_id: str, content: List[str], doc_name: str, collection_name_prefix: str = "tenant_"):
         """
@@ -265,21 +273,23 @@ class VectorStoreManager:
         tenant_collection_name = tenant_id
         collection = self.milvus_service.create_collection(tenant_collection_name, self._define_schema(tenant_id))
 
-        # Retrieve the doc_name associated with the entry_id
-        doc_name = self.milvus_service.get_doc_name_by_entry_id(collection, entry_id)
-        if not doc_name:
-            raise HTTPException(status_code=404, detail=f"Doc name for entry_id {entry_id} not found.")
+        lock = await self.get_lock(entry_id)
+        async with lock:
+            # Retrieve the doc_name associated with the entry_id
+            doc_name = self.milvus_service.get_doc_name_by_entry_id(collection, entry_id)
+            if not doc_name:
+                raise HTTPException(status_code=404, detail=f"Doc name for entry_id {entry_id} not found.")
 
-        # Delete the entry from Milvus
-        self.milvus_service.delete_entry_by_id(collection, entry_id)
+            # Delete the entry from Milvus
+            self.milvus_service.delete_entry_by_id(collection, entry_id)
 
-        # Update SQLAlchemy ORM database
-        async with SessionLocalAsync() as db:
-            try:
-                # Attempt to decrement the num_entries
-                update_data = TenantDocUpdateSchema(num_entries=-1)
-                await TenantDocService.decrement_tenant_doc_entries(tenant_id, doc_name, update_data, db)
-            except SQLAlchemyError as e:
-                # Log the error and raise an HTTP exception
-                logging.error(f"Database error while deleting entry: {e}")
-                raise HTTPException(status_code=500, detail="Failed to update the database after deleting the entry.")
+            # Update SQLAlchemy ORM database
+            async with SessionLocalAsync() as db:
+                try:
+                    # Attempt to decrement the num_entries
+                    update_data = TenantDocUpdateSchema(num_entries=-1)
+                    await TenantDocService.decrement_tenant_doc_entries(tenant_id, doc_name, update_data, db)
+                except SQLAlchemyError as e:
+                    # Log the error and raise an HTTP exception
+                    logging.error(f"Database error while deleting entry: {e}")
+                    raise HTTPException(status_code=500, detail="Failed to update the database after deleting the entry.")
