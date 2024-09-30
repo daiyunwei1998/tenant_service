@@ -1,13 +1,16 @@
+# app/services/parser_service.py
+
 import aio_pika
 import json
 import os
 from pathlib import Path
 import logging
+import aiofiles.os  # For asynchronous file operations
 
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.dependencies import get_db
+from app.dependencies import get_session  # Import the helper function
 from app.repository.vector_store import OpenAIEmbeddingService, MilvusCollectionService, VectorStoreManager
 from app.schemas.tenant_doc_schema import TenantDocCreateSchema
 from app.services.knowledge_base_service import KnowledgeBaseService
@@ -57,21 +60,23 @@ async def process_file(file_path: str, tenant_id: str):
         # Set success message
         message_text = f"Task completed successfully for {os.path.basename(file_path)}, tenant {tenant_id}"
 
-        async with get_db() as db:
-            tenant_doc_data = TenantDocCreateSchema(
-                tenant_id=tenant_id,
-                doc_name=file_name,
-                num_entries=number_of_entries
-            )
-            try:
-                # Call create_tenant_doc with the session
-                await TenantDocService.create_tenant_doc(tenant_doc_data, db)
-                logging.info(f"Tenant document created in database for tenant '{tenant_id}' and doc '{file_name}'.")
-            except HTTPException as he:
-                if he.status_code == 400:
-                    logging.warning(f"TenantDoc with tenant_id '{tenant_id}' and doc_name '{file_name}' already exists.")
-                else:
-                    logging.error(f"Failed to create TenantDoc: {he.detail}")
+        # Obtain the db session using the helper function
+        db = await get_session()
+        tenant_doc_data = TenantDocCreateSchema(
+            tenant_id=tenant_id,
+            doc_name=file_name,
+            num_entries=number_of_entries
+        )
+        try:
+            # Call create_tenant_doc with the session
+            await TenantDocService.create_tenant_doc(tenant_doc_data, db)
+            logging.info(f"Tenant document created in database for tenant '{tenant_id}' and doc '{file_name}'.")
+        except HTTPException as he:
+            if he.status_code == 400:
+                logging.warning(f"TenantDoc with tenant_id '{tenant_id}' and doc_name '{file_name}' already exists.")
+            else:
+                logging.error(f"Failed to create TenantDoc: {he.detail}")
+
     except Exception as e:
         status = "failure"
         error_message = str(e)
@@ -86,7 +91,7 @@ async def process_file(file_path: str, tenant_id: str):
         file_to_delete = Path(file_path)
         if file_to_delete.exists():
             try:
-                file_to_delete.unlink()  # Removes the file
+                await aiofiles.os.remove(file_path)  # Asynchronous file deletion
                 logging.info(f"File {file_path} deleted successfully after processing.")
             except Exception as delete_error:
                 logging.error(f"Failed to delete file {file_path}: {str(delete_error)}")
