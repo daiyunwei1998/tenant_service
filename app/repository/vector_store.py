@@ -138,7 +138,7 @@ class MilvusCollectionService:
             mutation_result = collection.delete(f"id == {entry_id}")
             collection.flush()
 
-            if mutation_result.deleted_count == 0:
+            if mutation_result.delete_count == 0:
                 logging.warning(f"No entries found with id {entry_id} to delete.")
                 raise RuntimeError(f"No entries found with id {entry_id} to delete.")
 
