@@ -7,6 +7,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from openai import OpenAI
 from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection, utility
+from pymilvus.orm.types import CONSISTENCY_STRONG
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
@@ -38,7 +39,7 @@ class MilvusCollectionService:
     def create_collection(self, name: str, schema: CollectionSchema) -> Collection:
         """Creates a new collection if it does not exist and returns the collection."""
         if not utility.has_collection(name):  # Check if the collection exists
-            collection = Collection(name=name, schema=schema)
+            collection = Collection(name=name, schema=schema, consistency_level=CONSISTENCY_STRONG)
             print(f"Collection '{name}' created successfully.")
         else:
             collection = Collection(name=name)  # Load the existing collection
@@ -129,28 +130,28 @@ class MilvusCollectionService:
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve doc_name for entry_id {entry_id}: {e}")
 
-    async def delete_entry_by_id(self, collection: Collection, entry_id: int):
+    def delete_entry_by_id(self, collection: Collection, entry_id: int):
         """Delete an entry by its id."""
-        async with self.lock:
-            try:
-                logging.info(f"Deleting vector DB entry by id {entry_id}")
-                mutation_result = collection.delete(f"id == {entry_id}")
-                collection.flush()
 
-                if mutation_result.deleted_count == 0:
-                    logging.warning(f"No entries found with id {entry_id} to delete.")
-                    raise RuntimeError(f"No entries found with id {entry_id} to delete.")
+        try:
+            logging.info(f"Deleting vector DB entry by id {entry_id}")
+            mutation_result = collection.delete(f"id == {entry_id}")
+            collection.flush()
 
-                # Confirm deletion
-                results = collection.query(f"id == {entry_id}", output_fields=["id"])
-                if results:
-                    logging.warning(f"Entry with id {entry_id} still exists after deletion attempt.")
-                    raise RuntimeError(f"Entry with id {entry_id} was not deleted.")
+            if mutation_result.deleted_count == 0:
+                logging.warning(f"No entries found with id {entry_id} to delete.")
+                raise RuntimeError(f"No entries found with id {entry_id} to delete.")
 
-                logging.info(f"Entry with id {entry_id} deleted successfully.")
-            except Exception as e:
-                logging.error(f"Error deleting entry with id {entry_id}: {e}")
-                raise RuntimeError(f"Failed to delete entry with id {entry_id}: {e}")
+            # Confirm deletion
+            results = collection.query(f"id == {entry_id}", output_fields=["id"])
+            if results:
+                logging.warning(f"Entry with id {entry_id} still exists after deletion attempt.")
+                raise RuntimeError(f"Entry with id {entry_id} was not deleted.")
+
+            logging.info(f"Entry with id {entry_id} deleted successfully.")
+        except Exception as e:
+            logging.error(f"Error deleting entry with id {entry_id}: {e}")
+            raise RuntimeError(f"Failed to delete entry with id {entry_id}: {e}")
 
     def update_entry_by_id(self, collection: Collection, entry_id: int, new_content: str,
                            openai_service: OpenAIEmbeddingService):
@@ -270,7 +271,7 @@ class VectorStoreManager:
             raise HTTPException(status_code=404, detail=f"Doc name for entry_id {entry_id} not found.")
 
         # Delete the entry from Milvus
-        await self.milvus_service.delete_entry_by_id(collection, entry_id)
+        self.milvus_service.delete_entry_by_id(collection, entry_id)
 
         # Update SQLAlchemy ORM database
         async with SessionLocalAsync() as db:
