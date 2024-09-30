@@ -129,7 +129,7 @@ class MilvusCollectionService:
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve doc_name for entry_id {entry_id}: {e}")
 
-    def delete_entry_by_id(self, collection: Collection, entry_id: int):
+    async def delete_entry_by_id(self, collection: Collection, entry_id: int):
         """Delete an entry by its id."""
         async with self.lock:
             try:
@@ -270,7 +270,7 @@ class VectorStoreManager:
             raise HTTPException(status_code=404, detail=f"Doc name for entry_id {entry_id} not found.")
 
         # Delete the entry from Milvus
-        self.milvus_service.delete_entry_by_id(collection, entry_id)
+        await self.milvus_service.delete_entry_by_id(collection, entry_id)
 
         # Update SQLAlchemy ORM database
         async with SessionLocalAsync() as db:
