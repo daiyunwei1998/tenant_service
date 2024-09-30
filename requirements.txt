@@ -24,3 +24,4 @@ aio-pika
 gevent
 motor
 asyncio
+aiofiles
