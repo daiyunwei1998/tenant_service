@@ -125,7 +125,7 @@ class MongoDBService:
         data = aggregation_result[0]
         return data.get("total_tokens_used", 0), data.get("total_price", 0.0)
 
-    async def aggregate_multiple_dates(self, tenant_id: str, dates: List[date]) -> Dict[str, Dict[str, float]]:
+    async def aggregate_multiple_dates(self, tenant_id: str, dates: List[date]) -> Dict[date, Dict[str, float]]:
         """
         Aggregates total tokens and total price for multiple specific dates from MongoDB.
 
@@ -179,8 +179,8 @@ class MongoDBService:
             month = record["_id"]["month"]
             day = record["_id"]["day"]
             # Format date as 'YYYY-MM-DD'
-            formatted_date = f"{year:04}-{month:02}-{day:02}"
-            mongo_data[formatted_date] = {
+            d = date(year, month, day)
+            mongo_data[d] = {
                 "tokens_used": record.get("total_tokens_used", 0),
                 "total_price": record.get("total_price", 0.0)
             }
