@@ -1,7 +1,5 @@
-# app/services/usage_service.py
-
 import logging
-from typing import List, Dict
+from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timedelta, timezone, date
@@ -22,14 +20,14 @@ class UsageService:
         """
         start_date = datetime(year, month, 1, tzinfo=timezone.utc)
         if month == 12:
-            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
         else:
-            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc)
 
         stmt = select(CentralUsage).where(
             CentralUsage.tenant_id == self.tenant_id,
             CentralUsage.date >= start_date,
-            CentralUsage.date <= end_date
+            CentralUsage.date < end_date
         )
 
         try:
@@ -45,11 +43,9 @@ class UsageService:
         # Adjust the date range
         adjusted_start_date = datetime(year, month, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
         if month == 12:
-            adjusted_end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
-                minutes=timezone_offset_minutes)
+            adjusted_end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
         else:
-            adjusted_end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
-                minutes=timezone_offset_minutes)
+            adjusted_end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
 
         # Fetch data from MySQL
         stmt = select(
@@ -58,7 +54,7 @@ class UsageService:
         ).where(
             CentralUsage.tenant_id == self.tenant_id,
             CentralUsage.date >= adjusted_start_date,
-            CentralUsage.date <= adjusted_end_date
+            CentralUsage.date < adjusted_end_date
         )
 
         try:
@@ -67,13 +63,19 @@ class UsageService:
             total_tokens = total_tokens or 0
             total_price = total_price or 0.0
 
-            # Fetch data from MongoDB and adjust
+            # Fetch data from MongoDB
             mongo_records = await mongodb_service.get_data_for_date_range(
                 self.tenant_id, adjusted_start_date, adjusted_end_date
             )
+
             # Adjust and sum tokens and prices
-            total_tokens += sum(record['total_tokens'] for record in mongo_records)
-            total_price += sum(record['total_tokens'] * record['per_token_price'] for record in mongo_records)
+            for record in mongo_records:
+                total_tokens += record['total_tokens']
+                document_total_price = sum(
+                    token_info['count'] * token_info['price_per_token']
+                    for token_info in record['tokens'].values()
+                )
+                total_price += document_total_price
 
             summary = MonthlySummary(
                 tenant_id=self.tenant_id,
@@ -92,13 +94,11 @@ class UsageService:
         # Adjust the date range based on the time zone offset
         start_date = datetime(year, month, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
         if month == 12:
-            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
-                minutes=timezone_offset_minutes)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
         else:
-            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
-                minutes=timezone_offset_minutes)
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
 
-        # Fetch data from MySQL without grouping
+        # Fetch data from MySQL
         stmt = select(
             CentralUsage.date,
             CentralUsage.tokens_used,
@@ -106,7 +106,7 @@ class UsageService:
         ).where(
             CentralUsage.tenant_id == self.tenant_id,
             CentralUsage.date >= start_date,
-            CentralUsage.date <= end_date
+            CentralUsage.date < end_date
         )
         result = await db.execute(stmt)
         mysql_records = result.fetchall()
@@ -125,10 +125,15 @@ class UsageService:
                 'total_price': record.total_price
             })
         for record in mongo_records:
+            # Calculate total_price for the MongoDB record
+            document_total_price = sum(
+                token_info['count'] * token_info['price_per_token']
+                for token_info in record['tokens'].values()
+            )
             all_records.append({
                 'date': record['created_at'],
                 'tokens_used': record['total_tokens'],
-                'total_price': record['total_tokens'] * record['per_token_price']
+                'total_price': document_total_price
             })
 
         # Adjust dates according to the time zone offset
@@ -155,7 +160,7 @@ class UsageService:
 
     async def insert_usage_record(self, db: AsyncSession, usage_data: UsageCreate) -> UsageRead:
         """
-        Inserts a new usage record into the tenant_usages table.
+        Inserts a new usage record into the central_usage table.
 
         :param db: The asynchronous database session.
         :param usage_data: The usage data to insert.
