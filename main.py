@@ -17,7 +17,6 @@ from app.models.tenant import Tenant, Base
 from app.routers import usage_router
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema
 from app.services.image_upload import upload_to_s3
-from app.services.task_complete_message_handler import start_message_handler
 from app.services.tenant_service import TenantService
 from app.routers.file_upload import router as upload_router
 from app.routers.knowlege_base import router as knowlege_base_router
@@ -58,7 +57,6 @@ async def startup():
     if not database.is_connected:
         await database.connect()
     await create_tables(engine)
-    await asyncio.create_task(start_message_handler())
 
 # Function to create tables asynchronously
 async def create_tables(engine: AsyncEngine):
