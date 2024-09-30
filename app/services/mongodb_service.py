@@ -187,6 +187,22 @@ class MongoDBService:
 
         return mongo_data
 
+    async def get_data_for_date_range(self, tenant_id: str, start_date: datetime, end_date: datetime):
+        collection = await self.get_tenant_collection(tenant_id)
+        cursor = collection.find({
+            "tenant_id": tenant_id,
+            "created_at": {
+                "$gte": start_date,
+                "$lte": end_date
+            }
+        }, {
+            "created_at": 1,
+            "total_tokens": 1,
+            "per_token_price": 1
+        })
+        records = await cursor.to_list(length=None)
+        return records
+
     async def close_connection(self):
         self.client.close()
 

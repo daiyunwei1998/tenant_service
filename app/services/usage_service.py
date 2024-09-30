@@ -40,24 +40,25 @@ class UsageService:
             logging.error(f"Error fetching monthly usage for tenant {self.tenant_id}: {e}")
             raise e
 
-    async def get_monthly_summary(self, db: AsyncSession, year: int, month: int) -> MonthlySummary:
-        """
-        Calculates the total tokens used and total price for the specified tenant and billing month, including today.
-        Returns 0 for tokens and price if no data is found.
-        """
-        start_date = datetime(year, month, 1, tzinfo=timezone.utc)
+    async def get_monthly_summary(self, db: AsyncSession, year: int, month: int,
+                                  timezone_offset_minutes: int = 0) -> MonthlySummary:
+        # Adjust the date range
+        adjusted_start_date = datetime(year, month, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
         if month == 12:
-            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+            adjusted_end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
+                minutes=timezone_offset_minutes)
         else:
-            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1)
+            adjusted_end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
+                minutes=timezone_offset_minutes)
 
+        # Fetch data from MySQL
         stmt = select(
             func.sum(CentralUsage.tokens_used).label("total_tokens"),
             func.sum(CentralUsage.total_price).label("total_price")
         ).where(
             CentralUsage.tenant_id == self.tenant_id,
-            CentralUsage.date >= start_date,
-            CentralUsage.date <= end_date
+            CentralUsage.date >= adjusted_start_date,
+            CentralUsage.date <= adjusted_end_date
         )
 
         try:
@@ -66,13 +67,13 @@ class UsageService:
             total_tokens = total_tokens or 0
             total_price = total_price or 0.0
 
-            # Aggregate additional data from MongoDB
-            mongo_tokens, mongo_price = await mongodb_service.aggregate_monthly_data(self.tenant_id, year, month)
-            mongo_tokens = mongo_tokens or 0
-            mongo_price = mongo_price or 0.0
-
-            total_tokens += mongo_tokens
-            total_price += mongo_price
+            # Fetch data from MongoDB and adjust
+            mongo_records = await mongodb_service.get_data_for_date_range(
+                self.tenant_id, adjusted_start_date, adjusted_end_date
+            )
+            # Adjust and sum tokens and prices
+            total_tokens += sum(record['total_tokens'] for record in mongo_records)
+            total_price += sum(record['total_tokens'] * record['per_token_price'] for record in mongo_records)
 
             summary = MonthlySummary(
                 tenant_id=self.tenant_id,
@@ -86,81 +87,71 @@ class UsageService:
             logging.error(f"Error calculating monthly summary for tenant {self.tenant_id}: {e}")
             raise e
 
-    async def get_combined_daily_usage(self, db: AsyncSession, year: int, month: int) -> List[DailySummary]:
-        """
-        Retrieves daily usage records for the specified tenant and billing month, combining MySQL and MongoDB data.
-        Ensures that all dates in the month are present, with 0 tokens and price for dates with no data.
-        """
-        # Define the start and end dates of the month
-        start_date = date(year, month, 1)
+    async def get_combined_daily_usage(self, db: AsyncSession, year: int, month: int,
+                                       timezone_offset_minutes: int = 0) -> List[DailySummary]:
+        # Adjust the date range based on the time zone offset
+        start_date = datetime(year, month, 1, tzinfo=timezone.utc) - timedelta(minutes=timezone_offset_minutes)
         if month == 12:
-            end_date = date(year + 1, 1, 1) - timedelta(days=1)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
+                minutes=timezone_offset_minutes)
         else:
-            end_date = date(year, month + 1, 1) - timedelta(days=1)
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(seconds=1) - timedelta(
+                minutes=timezone_offset_minutes)
 
-        try:
-            # Fetch MySQL data aggregated by date
-            stmt = select(
-                func.date(CentralUsage.date).label("date"),
-                func.sum(CentralUsage.tokens_used).label("tokens_used"),
-                func.sum(CentralUsage.total_price).label("total_price")
-            ).where(
-                CentralUsage.tenant_id == self.tenant_id,
-                CentralUsage.date >= datetime(year, month, 1, tzinfo=timezone.utc),
-                CentralUsage.date <= datetime(year, month, end_date.day, 23, 59, 59, tzinfo=timezone.utc)
-            ).group_by(func.date(CentralUsage.date))
+        # Fetch data from MySQL without grouping
+        stmt = select(
+            CentralUsage.date,
+            CentralUsage.tokens_used,
+            CentralUsage.total_price
+        ).where(
+            CentralUsage.tenant_id == self.tenant_id,
+            CentralUsage.date >= start_date,
+            CentralUsage.date <= end_date
+        )
+        result = await db.execute(stmt)
+        mysql_records = result.fetchall()
 
-            result = await db.execute(stmt)
-            mysql_records = result.fetchall()
+        # Fetch data from MongoDB
+        mongo_records = await mongodb_service.get_data_for_date_range(
+            self.tenant_id, start_date, end_date
+        )
 
-            # Create a dictionary from MySQL records for easy lookup
-            mysql_data: Dict[date, Dict[str, float]] = {
-                record.date: {
-                    "tokens_used": record.tokens_used,
-                    "total_price": record.total_price
-                } for record in mysql_records
-            }
+        # Combine and adjust records
+        all_records = []
+        for record in mysql_records:
+            all_records.append({
+                'date': record.date,
+                'tokens_used': record.tokens_used,
+                'total_price': record.total_price
+            })
+        for record in mongo_records:
+            all_records.append({
+                'date': record['created_at'],
+                'tokens_used': record['total_tokens'],
+                'total_price': record['total_tokens'] * record['per_token_price']
+            })
 
-            # Generate all dates in the month
-            total_days = (end_date - start_date).days + 1
-            all_dates = [start_date + timedelta(days=i) for i in range(total_days)]
+        # Adjust dates according to the time zone offset
+        from collections import defaultdict
+        daily_data = defaultdict(lambda: {'tokens_used': 0, 'total_price': 0.0})
 
-            # Identify dates missing in MySQL data
-            missing_dates = [d for d in all_dates if d not in mysql_data]
+        for record in all_records:
+            adjusted_datetime = record['date'] + timedelta(minutes=timezone_offset_minutes)
+            adjusted_date = adjusted_datetime.date()
+            daily_data[adjusted_date]['tokens_used'] += record['tokens_used']
+            daily_data[adjusted_date]['total_price'] += record['total_price']
 
-            # Fetch MongoDB data for missing dates
-            mongo_data = await mongodb_service.aggregate_multiple_dates(self.tenant_id, missing_dates)
+        # Generate daily summaries
+        daily_summaries = [
+            DailySummary(
+                date=d.strftime("%Y-%m-%d"),
+                tokens_used=int(daily_data[d]['tokens_used']),
+                total_price=float(daily_data[d]['total_price'])
+            )
+            for d in sorted(daily_data.keys())
+        ]
 
-            # Initialize daily_data with all dates set to 0
-            daily_data: Dict[date, Dict[str, float]] = {
-                d: {"tokens_used": 0, "total_price": 0.0} for d in all_dates
-            }
-
-            # Populate daily_data with MySQL data
-            for d, data in mysql_data.items():
-                daily_data[d]["tokens_used"] += data["tokens_used"]
-                daily_data[d]["total_price"] += data["total_price"]
-
-            # Populate daily_data with MongoDB data
-            for d, data in mongo_data.items():
-                daily_data[d]["tokens_used"] += data["tokens_used"]
-                daily_data[d]["total_price"] += data["total_price"]
-
-            # Convert the data into a list of DailySummary
-            daily_summaries = [
-                DailySummary(
-                    date=d.strftime("%Y-%m-%d"),
-                    tokens_used=int(daily_data[d]["tokens_used"]),
-                    total_price=float(daily_data[d]["total_price"])
-                )
-                for d in sorted(all_dates)
-            ]
-
-            return daily_summaries
-
-        except SQLAlchemyError as e:
-            logging.error(f"Error fetching daily usage for tenant {self.tenant_id}: {e}")
-            raise e
+        return daily_summaries
 
     async def insert_usage_record(self, db: AsyncSession, usage_data: UsageCreate) -> UsageRead:
         """

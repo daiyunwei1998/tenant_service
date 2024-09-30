@@ -58,6 +58,7 @@ async def get_daily_usage_endpoint(
         tenant_id: str = Query(..., description="The tenant's unique identifier"),
         year: int = Query(..., ge=1900, le=2100, description="The billing year"),
         month: int = Query(..., ge=1, le=12, description="The billing month (1-12)"),
+        timezone_offset_minutes: int = Query(0, description="Timezone offset in minutes from UTC"),
         db: AsyncSession = Depends(get_db_async)
 ):
     """
@@ -73,7 +74,7 @@ async def get_daily_usage_endpoint(
 
     service = UsageService(tenant_id)
     try:
-        daily_usage = await service.get_combined_daily_usage(db, year, month)
+        daily_usage = await service.get_combined_daily_usage(db, year, month, timezone_offset_minutes)
     except Exception as e:
         logging.error(f"Error in get_daily_usage_endpoint: {e}")
         raise HTTPException(status_code=500, detail="Error fetching daily usage records.")
