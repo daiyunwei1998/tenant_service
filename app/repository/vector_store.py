@@ -131,13 +131,26 @@ class MilvusCollectionService:
 
     def delete_entry_by_id(self, collection: Collection, entry_id: int):
         """Delete an entry by its id."""
-        try:
-            logging.info(f"deleting vector db entry by id {entry_id}")
-            collection.delete(f"id == {entry_id}")
-            collection.flush()
-            logging.info(f"Entry with id {entry_id} deleted successfully.")
-        except Exception as e:
-            raise RuntimeError(f"Failed to delete entry with id {entry_id}: {e}")
+        async with self.lock:
+            try:
+                logging.info(f"Deleting vector DB entry by id {entry_id}")
+                mutation_result = collection.delete(f"id == {entry_id}")
+                collection.flush()
+
+                if mutation_result.deleted_count == 0:
+                    logging.warning(f"No entries found with id {entry_id} to delete.")
+                    raise RuntimeError(f"No entries found with id {entry_id} to delete.")
+
+                # Confirm deletion
+                results = collection.query(f"id == {entry_id}", output_fields=["id"])
+                if results:
+                    logging.warning(f"Entry with id {entry_id} still exists after deletion attempt.")
+                    raise RuntimeError(f"Entry with id {entry_id} was not deleted.")
+
+                logging.info(f"Entry with id {entry_id} deleted successfully.")
+            except Exception as e:
+                logging.error(f"Error deleting entry with id {entry_id}: {e}")
+                raise RuntimeError(f"Failed to delete entry with id {entry_id}: {e}")
 
     def update_entry_by_id(self, collection: Collection, entry_id: int, new_content: str,
                            openai_service: OpenAIEmbeddingService):
