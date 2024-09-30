@@ -23,3 +23,4 @@ asgiref
 aio-pika
 gevent
 motor
+asyncio
