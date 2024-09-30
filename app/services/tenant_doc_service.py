@@ -15,15 +15,36 @@ class TenantDocService:
 
     @staticmethod
     async def create_tenant_doc(tenant_doc_data: TenantDocCreateSchema, db: AsyncSession):
+        # Check if the TenantDoc already exists
+        stmt = select(TenantDoc).where(
+            TenantDoc.tenant_id == tenant_doc_data.tenant_id,
+            TenantDoc.doc_name == tenant_doc_data.doc_name
+        )
+        result = await db.execute(stmt)
+        existing_doc = result.scalar_one_or_none()
+
+        if existing_doc:
+            logging.warning(
+                f"TenantDoc already exists for tenant_id '{tenant_doc_data.tenant_id}' and doc_name '{tenant_doc_data.doc_name}'.")
+            raise HTTPException(status_code=400, detail="TenantDoc with this tenant_id and doc_name already exists.")
+
+        # If not existing, proceed to create
         new_doc = TenantDoc(**tenant_doc_data.dict())
         db.add(new_doc)
         try:
             await db.flush()  # To get the ID
-        except IntegrityError:
+            logging.info(f"Added TenantDoc: {tenant_doc_data}")
+        except IntegrityError as e:
             await db.rollback()
+            logging.error(f"IntegrityError while creating TenantDoc: {e}")
             raise HTTPException(status_code=400, detail="TenantDoc with this tenant_id and doc_name already exists.")
+        except Exception as e:
+            await db.rollback()
+            logging.error(f"Unexpected error while creating TenantDoc: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error.")
         await db.commit()
         await db.refresh(new_doc)
+        logging.info(f"Committed TenantDoc: {new_doc}")
         return new_doc
 
     @staticmethod
