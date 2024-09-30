@@ -1,8 +1,9 @@
+import asyncio
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
 from pathlib import Path
 from datetime import datetime
 
-from app.services.parser_service import process_file
+from app.services.parser_service import process_file  # Ensure this is the updated async version
 
 router = APIRouter()
 
@@ -24,12 +25,13 @@ async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(.
         timestamped_filename = f"{tenant_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
         file_location = UPLOAD_DIRECTORY / timestamped_filename
 
-        # Write the file to the file system
-        with open(file_location, "wb") as buffer:
-            buffer.write(await file.read())
+        # Write the file to the file system asynchronously
+        async with aiofiles.open(file_location, "wb") as buffer:
+            content = await file.read()
+            await buffer.write(content)
 
-        # Add process_file to background tasks
-        background_tasks.add_task(process_file, str(file_location), tenant_id)
+        # Schedule the asynchronous task
+        asyncio.create_task(process_file(str(file_location), tenant_id))
 
         return {
             "filename": file.filename,

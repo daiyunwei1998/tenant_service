@@ -1,64 +1,47 @@
-import pika
+import aio_pika
 import json
 import os
 from pathlib import Path
 import logging
+
+from fastapi import HTTPException
+
 from app.core.config import settings
+from app.dependencies import get_db
 from app.repository.vector_store import OpenAIEmbeddingService, MilvusCollectionService, VectorStoreManager
+from app.schemas.tenant_doc_schema import TenantDocCreateSchema
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.tenant_doc_service import TenantDocService
+
+# Initialize services
+openai_service = OpenAIEmbeddingService(api_key=settings.OPENAI_API_KEY, model=settings.embedding_model)
+milvus_service = MilvusCollectionService(host=settings.MILVUS_HOST, port=settings.MILVUS_PORT)
+vector_store_manager = VectorStoreManager(openai_service, milvus_service)
 
 # Load environment variables from your RabbitMQ config
 rabbitmq_host = os.getenv("RABBITMQ_HOST")
 rabbitmq_username = os.getenv("RABBITMQ_USERNAME")
 rabbitmq_password = os.getenv("RABBITMQ_PASSWORD")
 
-# Dependency injection
-openai_service = OpenAIEmbeddingService(api_key=settings.OPENAI_API_KEY, model=settings.embedding_model)
-milvus_service = MilvusCollectionService(host=settings.MILVUS_HOST, port=settings.MILVUS_PORT)
-vector_store_manager = VectorStoreManager(openai_service, milvus_service)
-
-def send_rabbitmq_message(queue_name, message):
-    # Define connection parameters, including credentials
-    credentials = pika.PlainCredentials(rabbitmq_username, rabbitmq_password)
-
-    connection_params = pika.ConnectionParameters(
-        host=rabbitmq_host,
-        port=5672,
-        virtual_host='/',
-        credentials=credentials,
-        heartbeat=600,
-        blocked_connection_timeout=300
-    )
-
+async def send_rabbitmq_message_async(queue_name, message):
+    connection_url = f"amqp://{rabbitmq_username}:{rabbitmq_password}@{rabbitmq_host}/"
     try:
-        # Establish a connection to RabbitMQ
-        connection = pika.BlockingConnection(connection_params)
-        channel = connection.channel()
-
-        # Declare the queue (it will only be created if it doesn't already exist)
-        channel.queue_declare(queue=queue_name, durable=True)
-
-        # Publish the message to the queue
-        channel.basic_publish(
-            exchange='',
-            routing_key=queue_name,
-            body=json.dumps(message),
-            properties=pika.BasicProperties(
-                delivery_mode=2,  # Make message persistent
+        connection = await aio_pika.connect_robust(connection_url)
+        async with connection:
+            channel = await connection.channel()
+            await channel.declare_queue(queue_name, durable=True)
+            await channel.default_exchange.publish(
+                aio_pika.Message(
+                    body=json.dumps(message).encode(),
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                ),
+                routing_key=queue_name
             )
-        )
+            logging.info(f"Message sent to queue {queue_name}: {message}")
+    except aio_pika.exceptions.AMQPConnectionError as e:
+        logging.error(f"Failed to connect to RabbitMQ: {e}")
 
-        print(f"Message sent to queue {queue_name}: {message}")
-
-    except pika.exceptions.AMQPConnectionError as e:
-        print(f"Failed to connect to RabbitMQ: {e}")
-
-    finally:
-        # Always close the connection
-        if connection and connection.is_open:
-            connection.close()
-
-def process_file(file_path: str, tenant_id: str):
+async def process_file(file_path: str, tenant_id: str):
     status = "success"
     number_of_entries = 0
     error_message = ""
@@ -66,14 +49,29 @@ def process_file(file_path: str, tenant_id: str):
         # Process the file with KnowledgeBaseService
         texts = KnowledgeBaseService.process_file(file_path)
         number_of_entries = len(texts)  # Calculate the number of entries processed
-
-        vector_store_manager.process_tenant_data(tenant_id, texts, os.path.basename(file_path))
+        file_name = os.path.basename(file_path)
+        vector_store_manager.process_tenant_data(tenant_id, texts, file_name)
 
         logging.info(f"Processing completed for tenant {tenant_id}, file: {file_path}, entries processed: {number_of_entries}")
 
         # Set success message
         message_text = f"Task completed successfully for {os.path.basename(file_path)}, tenant {tenant_id}"
 
+        async with get_db() as db:
+            tenant_doc_data = TenantDocCreateSchema(
+                tenant_id=tenant_id,
+                doc_name=file_name,
+                num_entries=number_of_entries
+            )
+            try:
+                # Call create_tenant_doc with the session
+                await TenantDocService.create_tenant_doc(tenant_doc_data, db)
+                logging.info(f"Tenant document created in database for tenant '{tenant_id}' and doc '{file_name}'.")
+            except HTTPException as he:
+                if he.status_code == 400:
+                    logging.warning(f"TenantDoc with tenant_id '{tenant_id}' and doc_name '{file_name}' already exists.")
+                else:
+                    logging.error(f"Failed to create TenantDoc: {he.detail}")
     except Exception as e:
         status = "failure"
         error_message = str(e)
@@ -108,7 +106,7 @@ def process_file(file_path: str, tenant_id: str):
         if status == "failure":
             message["error"] = error_message
 
-        # Send the message to RabbitMQ
-        send_rabbitmq_message('chunking_complete_notification_queue', message)
+        # Send the message to RabbitMQ asynchronously
+        await send_rabbitmq_message_async('chunking_complete_notification_queue', message)
 
         return message  # Optionally return the message
