@@ -33,7 +33,7 @@ async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(.
             await buffer.write(content)
 
         # Schedule the asynchronous task
-        asyncio.create_task(process_file(str(file_location), tenant_id))
+        await asyncio.create_task(process_file(str(file_location), tenant_id))
 
         return {
             "filename": file.filename,
