@@ -42,6 +42,9 @@ class Settings(BaseSettings):
 
     DATABASE_NAME: str = "ai_replies_db"
 
+    UNSTRUCTURED_API_KEY: str = os.getenv('UNSTRUCTURED_API_KEY')
+    UNSTRUCTURED_API_URL: str = os.getenv('UNSTRUCTURED_API_URL')
+
     @property
     def database_url(self):
         return f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}"

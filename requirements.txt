@@ -25,3 +25,5 @@ gevent
 motor
 asyncio
 aiofiles
+unstructured-ingest
+unstructured_client
