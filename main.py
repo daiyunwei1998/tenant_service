@@ -23,7 +23,7 @@ from app.routers.knowlege_base import router as knowlege_base_router
 from app.routers.tenant_doc import router as tenant_doc_router
 
 app = FastAPI()
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # Include existing routers
 app.include_router(upload_router, prefix="/files")
 app.include_router(knowlege_base_router)

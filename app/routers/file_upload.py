@@ -32,8 +32,8 @@ async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(.
             content = await file.read()
             await buffer.write(content)
 
-        # Schedule the asynchronous task
-        await asyncio.create_task(process_file(str(file_location), tenant_id))
+        # Schedule the background task without awaiting it
+        background_tasks.add_task(process_file, str(file_location), tenant_id)
 
         return {
             "filename": file.filename,
@@ -42,4 +42,5 @@ async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(.
         }
 
     except Exception as e:
+        logging.error(f"Error in upload_file endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
