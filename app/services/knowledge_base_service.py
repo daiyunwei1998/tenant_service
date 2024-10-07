@@ -1,3 +1,4 @@
+import logging
 import os
 from app.core.config import settings
 from openparse import processing, DocumentParser
@@ -17,9 +18,11 @@ class KnowledgeBaseService:
             min_tokens=64,
             max_tokens=1024,
         )
+        logging.info("Starting parsing" + basic_doc_path)
         parser = DocumentParser(
             processing_pipeline=semantic_pipeline,
         )
         parsed_content = parser.parse(basic_doc_path).model_dump()
         texts = [node['text'] for node in parsed_content['nodes']]
+        logging.info(f"parsed text: {texts}")
         return texts

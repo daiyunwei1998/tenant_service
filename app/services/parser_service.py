@@ -49,6 +49,7 @@ async def process_file(file_path: str, tenant_id: str):
     number_of_entries = 0
     error_message = ""
     try:
+        logging.info("process_file worker")
         # Process the file with KnowledgeBaseService
         texts = KnowledgeBaseService.process_file(file_path)
         number_of_entries = len(texts)  # Calculate the number of entries processed
