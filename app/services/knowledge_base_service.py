@@ -1,120 +1,47 @@
 import logging
-import os
-import json
 from typing import List
 
-import openparse
-from openparse import processing, DocumentParser
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
 
 from app.core.config import settings
-import unstructured_client
-from unstructured_client.models import operations, shared
-
-from llama_parse import LlamaParse
-
-class MinimalIngestionPipeline(processing.IngestionPipeline):
-    def __init__(self):
-        self.transformations = [
-            # combines bullets and weird formatting
-            processing.CombineNodesSpatially(
-                x_error_margin=10,
-                y_error_margin=2,
-                criteria="both_small",
-            ),
-            processing.CombineHeadingsWithClosestText(),
-            processing.CombineBullets(),
-            processing.RemoveMetadataElements(),
-            processing.RemoveNodesBelowNTokens(min_tokens=10),
-        ]
 
 
 class KnowledgeBaseService:
     def __init__(self):
-        self.client = unstructured_client.UnstructuredClient(
-            api_key_auth=settings.UNSTRUCTURED_API_KEY,
-            server_url=settings.UNSTRUCTURED_API_URL,
+        # Initialize OpenAI Embeddings
+        self.embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
+        logging.info("OpenAI Embeddings initialized.")
+
+
+    def process_file(self, file_path: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[str]:
+        """
+        Processes the given PDF file and returns a list of extracted text chunks.
+
+        :param file_path: Path to the input PDF file.
+        :param chunk_size: Maximum number of characters per chunk.
+        :param chunk_overlap: Number of overlapping characters between chunks.
+        :return: List of text chunks extracted from the PDF.
+        """
+        logging.info(f"Processing file: {file_path}")
+
+        # Load and extract text from PDF
+        loader = PyPDFLoader(file_path)
+        documents = loader.load()
+        logging.info(f"Loaded {len(documents)} pages from PDF.")
+
+        # Split text into chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            separators=["\n\n", "\n", " ", ""]
         )
-        logging.info("UnstructuredClient initialized.")
+        chunks = text_splitter.split_documents(documents)
+        logging.info(f"Split into {len(chunks)} chunks.")
 
-    def process_file(self, file_path: str) -> List[str]:
-        """
-        Processes the given file and returns a list of extracted text segments.
+        # Extract text content from chunks
+        chunk_texts = [chunk.page_content for chunk in chunks]
 
-        :param file_path: Path to the input file.
-        :return: List of text segments extracted from the file.
-        """
-        elements = self.doc_parser(file_path)
-        return elements
+        return chunk_texts
 
-    def doc_parser(self, file_path: str) -> List[str]:
-        # parser = openparse.DocumentParser(
-        #    processing_pipeline=MinimalIngestionPipeline(),
-        # )
-        # parsed_content = parser.parse(file_path)
-
-
-        parser = LlamaParse(
-            api_key= "llx-XUlYATRaUoWoKveSW6zQ74Z6HMEWAufywJp2YXT3d5JfLoGw",
-            result_type="text",  # "markdown" and "text" are available
-            verbose=True,
-        )
-        documents = parser.load_data(file_path)
-        logging.info(documents)
-        return documents
-
-    def parser(self, file_path: str) -> List[str]:
-        """
-        Parses the file using the UnstructuredClient and returns the parsed elements.
-
-        :param file_path: Path to the input file.
-        :return: List of parsed elements as dictionaries.
-        """
-        logging.info(f"Starting parsing of {file_path}")
-
-        try:
-            with open(file_path, "rb") as f:
-                data = f.read()
-
-            req = operations.PartitionRequest(
-                partition_parameters=shared.PartitionParameters(
-                    files=shared.Files(
-                        content=data,
-                        file_name=os.path.basename(file_path),
-                    ),
-                    strategy=shared.Strategy.HI_RES,
-                    languages=['eng'],
-                    split_pdf_page=True,  # If True, splits the PDF file into smaller chunks of pages.
-                    split_pdf_allow_failed=True,  # If True, the partitioning continues even if some pages fail.
-                    split_pdf_concurrency_level=15  # Set the number of concurrent requests to the maximum value: 15.
-                ),
-            )
-
-            res = self.client.general.partition(request=req)
-            elements = [item['text'] for item in  res.elements if len(item['text']) >= 5]
-
-            logging.info(f"Parsed elements: {elements}")
-            return elements
-
-        except Exception as e:
-            logging.error(f"Error parsing file {file_path}: {e}")
-            raise
-
-
-# Example usage:
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    kb_service = KnowledgeBaseService()
-    input_file = "PATH_TO_INPUT_FILE"  # Replace with your input file path
-    output_file = "PATH_TO_OUTPUT_FILE"  # Replace with your desired output file path
-
-    try:
-        extracted_texts = kb_service.process_file(input_file)
-
-        # Optionally, write the extracted texts to an output file
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(extracted_texts, f, indent=2)
-
-        logging.info(f"Successfully processed and saved extracted texts to {output_file}")
-
-    except Exception as e:
-        logging.error(f"Failed to process file: {e}")
