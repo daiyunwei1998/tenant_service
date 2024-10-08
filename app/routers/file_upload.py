@@ -36,6 +36,7 @@ async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(.
         # Schedule the background task without awaiting it
         background_tasks.add_task(process_file, str(file_location), tenant_id)
 
+
         return {
             "filename": file.filename,
             "location": str(file_location),

@@ -53,10 +53,14 @@ async def process_file(file_path: str, tenant_id: str):
         # Process the file with KnowledgeBaseService
         kb_service = KnowledgeBaseService()
         texts = kb_service.process_file(file_path)
+        #logging.info(texts)
+
+        for text in texts:
+            logging.info(len(text))
 
         number_of_entries = len(texts)  # Calculate the number of entries processed
         file_name = os.path.basename(file_path)
-        vector_store_manager.process_tenant_data(tenant_id, texts, file_name)
+       # vector_store_manager.process_tenant_data(tenant_id, texts, file_name)
 
         logging.info(f"Processing completed for tenant {tenant_id}, file: {file_path}, entries processed: {number_of_entries}")
 

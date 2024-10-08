@@ -3,9 +3,29 @@ import os
 import json
 from typing import List
 
+import openparse
+from openparse import processing, DocumentParser
+
 from app.core.config import settings
 import unstructured_client
 from unstructured_client.models import operations, shared
+
+from llama_parse import LlamaParse
+
+class MinimalIngestionPipeline(processing.IngestionPipeline):
+    def __init__(self):
+        self.transformations = [
+            # combines bullets and weird formatting
+            processing.CombineNodesSpatially(
+                x_error_margin=10,
+                y_error_margin=2,
+                criteria="both_small",
+            ),
+            processing.CombineHeadingsWithClosestText(),
+            processing.CombineBullets(),
+            processing.RemoveMetadataElements(),
+            processing.RemoveNodesBelowNTokens(min_tokens=10),
+        ]
 
 
 class KnowledgeBaseService:
@@ -23,12 +43,26 @@ class KnowledgeBaseService:
         :param file_path: Path to the input file.
         :return: List of text segments extracted from the file.
         """
-        elements = self.parser(file_path)
-        texts = [element.get('text', '') for element in elements]
-        logging.info(f"Extracted texts: {texts}")
-        return texts
+        elements = self.doc_parser(file_path)
+        return elements
 
-    def parser(self, file_path: str) -> List[dict]:
+    def doc_parser(self, file_path: str) -> List[str]:
+        # parser = openparse.DocumentParser(
+        #    processing_pipeline=MinimalIngestionPipeline(),
+        # )
+        # parsed_content = parser.parse(file_path)
+
+
+        parser = LlamaParse(
+            api_key= "llx-XUlYATRaUoWoKveSW6zQ74Z6HMEWAufywJp2YXT3d5JfLoGw",
+            result_type="text",  # "markdown" and "text" are available
+            verbose=True,
+        )
+        documents = parser.load_data(file_path)
+        logging.info(documents)
+        return documents
+
+    def parser(self, file_path: str) -> List[str]:
         """
         Parses the file using the UnstructuredClient and returns the parsed elements.
 
