@@ -10,7 +10,7 @@ import aiofiles.os  # For asynchronous file operations
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.dependencies import get_session  # Import the helper function
+from app.dependencies import get_session, get_background_session  # Import the helper function
 from app.repository.vector_store import OpenAIEmbeddingService, MilvusCollectionService, VectorStoreManager
 from app.schemas.tenant_doc_schema import TenantDocCreateSchema
 from app.services.knowledge_base_service import KnowledgeBaseService
@@ -63,22 +63,13 @@ async def process_file(file_path: str, tenant_id: str):
         # Set success message
         message_text = f"Task completed successfully for {os.path.basename(file_path)}, tenant {tenant_id}"
 
-        # Obtain the db session using the helper function
-        db = await get_session()
-        tenant_doc_data = TenantDocCreateSchema(
-            tenant_id=tenant_id,
-            doc_name=file_name,
-            num_entries=number_of_entries
-        )
-        try:
-            # Call create_tenant_doc with the session
-            await TenantDocService.create_tenant_doc(tenant_doc_data, db)
-            logging.info(f"Tenant document created in database for tenant '{tenant_id}' and doc '{file_name}'.")
-        except HTTPException as he:
-            if he.status_code == 400:
-                logging.warning(f"TenantDoc with tenant_id '{tenant_id}' and doc_name '{file_name}' already exists.")
-            else:
-                logging.error(f"Failed to create TenantDoc: {he.detail}")
+        async with get_background_session() as session:
+            # Create a new TenantDoc record using TenantDocService
+            tenant_doc_data = TenantDocCreateSchema(
+                tenant_id=tenant_id,
+                doc_name=file_name,
+                num_entries=number_of_entries
+            )
 
     except Exception as e:
         status = "failure"

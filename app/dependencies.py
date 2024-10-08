@@ -19,3 +19,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def get_session() -> AsyncSession:
     async for session in get_db():
         return session
+
+# New session maker specifically for background tasks
+SessionBackground = sessionmaker(
+    bind=engine_async,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+async def get_background_session() -> AsyncSession:
+    """
+    Provides a new AsyncSession for background tasks.
+    Ensures that each background task gets its own session.
+    """
+    return SessionBackground()
