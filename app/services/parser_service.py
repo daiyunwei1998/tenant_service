@@ -70,6 +70,8 @@ async def process_file(file_path: str, tenant_id: str):
                 doc_name=file_name,
                 num_entries=number_of_entries
             )
+            await TenantDocService.create_tenant_doc(tenant_doc_data, session)
+
 
     except Exception as e:
         status = "failure"
