@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
@@ -16,6 +17,8 @@ UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 # Allowed file types
 ALLOWED_EXTENSIONS = {'.txt', '.json', '.pdf'}
+
+executor = ThreadPoolExecutor(max_workers=5)
 
 @router.post("/upload/")
 async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(...), file: UploadFile = File(...)):
@@ -35,7 +38,12 @@ async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(.
 
         # Schedule the background task without awaiting it
         # background_tasks.add_task(process_file, str(file_location), tenant_id)
-        background_tasks.add_task(asyncio.to_thread, process_file, str(file_location), tenant_id)
+        background_tasks.add_task(
+            executor.submit,
+            process_file,
+            str(file_location),
+            tenant_id
+        )
 
         return {
             "filename": file.filename,
