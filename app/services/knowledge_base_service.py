@@ -56,10 +56,10 @@ class KnowledgeBaseService:
             )
 
             res = self.client.general.partition(request=req)
-            element_dicts = [element for element in res.elements]
+            elements = [item['text'] for item in  res.elements if len(item['text']) >= 5]
 
-            logging.info(f"Parsed elements: {element_dicts}")
-            return element_dicts
+            logging.info(f"Parsed elements: {elements}")
+            return elements
 
         except Exception as e:
             logging.error(f"Error parsing file {file_path}: {e}")
