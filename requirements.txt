@@ -30,3 +30,5 @@ unstructured_client
 pymongo~=4.9.1
 unstructured-client~=0.25.9
 llama-parse~=0.5.7
+langchain
+langchain-community
