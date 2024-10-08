@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import logging
 import aiofiles.os  # For asynchronous file operations
+import asyncio
 
 from fastapi import HTTPException
 
@@ -52,11 +53,11 @@ async def process_file(file_path: str, tenant_id: str):
         logging.info("process_file worker")
         # Process the file with KnowledgeBaseService
         kb_service = KnowledgeBaseService()
-        texts = kb_service.process_file(file_path)
+        texts = await asyncio.to_thread(kb_service.process_file, file_path)
 
         number_of_entries = len(texts)  # Calculate the number of entries processed
         file_name = os.path.basename(file_path)
-        vector_store_manager.process_tenant_data(tenant_id, texts, file_name)
+        await asyncio.to_thread(vector_store_manager.process_tenant_data, tenant_id, texts, file_name)
 
         logging.info(f"Processing completed for tenant {tenant_id}, file: {file_path}, entries processed: {number_of_entries}")
 

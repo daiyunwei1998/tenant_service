@@ -1,13 +1,14 @@
-import asyncio
-import logging
-from concurrent.futures import ThreadPoolExecutor
+# app/routers/file_upload.py
 
-import aiofiles
-from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
+import logging
+from typing import List
 from pathlib import Path
 from datetime import datetime
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException
+import aiofiles
+import threading
 
-from app.services.parser_service import process_file  # Ensure this is the updated async version
+from app.services.parser_service import process_file  # Ensure this is the updated version
 
 router = APIRouter()
 
@@ -18,9 +19,26 @@ UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
 # Allowed file types
 ALLOWED_EXTENSIONS = {'.txt', '.json', '.pdf'}
 
+def submit_process_file(file_path: str, tenant_id: str):
+    """
+    Runs the process_file coroutine in a separate thread.
+    """
+    try:
+        # Import asyncio within the thread
+        import asyncio
+
+        # Create a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(process_file(file_path, tenant_id))
+    except Exception as e:
+        logging.error(f"Error in background processing: {str(e)}")
+    finally:
+        # Close the loop to free resources
+        loop.close()
 
 @router.post("/upload/")
-async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(...), file: UploadFile = File(...)):
+def upload_file(tenant_id: str = Form(...), file: UploadFile = File(...)):
     # Validate file extension
     if not file.filename.endswith(tuple(ALLOWED_EXTENSIONS)):
         raise HTTPException(status_code=400, detail="Invalid file type")
@@ -31,16 +49,20 @@ async def upload_file(background_tasks: BackgroundTasks, tenant_id: str = Form(.
         file_location = UPLOAD_DIRECTORY / timestamped_filename
 
         # Write the file to the file system asynchronously
-        async with aiofiles.open(file_location, "wb") as buffer:
-            content = await file.read()
-            await buffer.write(content)
+        # Note: Even though the endpoint is synchronous, aiofiles can be used with asyncio.run
+        import asyncio
 
-        # Schedule the background task without awaiting it
-        # background_tasks.add_task(process_file, str(file_location), tenant_id)
-        # background_tasks.add_task(submit_process_file, str(file_location), tenant_id)
+        async def save_file():
+            async with aiofiles.open(file_location, "wb") as buffer:
+                content = await file.read()
+                await buffer.write(content)
 
-        loop = asyncio.get_event_loop()
-        loop.create_task(process_file(str(file_location),tenant_id))
+        asyncio.run(save_file())
+
+        # Start a new thread for background processing
+        thread = threading.Thread(target=submit_process_file, args=(str(file_location), tenant_id), daemon=True)
+        thread.start()
+        logging.info(f"Started background thread for processing {file_location}, tenant {tenant_id}")
 
         return {
             "filename": file.filename,
