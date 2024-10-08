@@ -27,7 +27,7 @@ SessionBackground = sessionmaker(
     expire_on_commit=False
 )
 
-async def get_background_session() -> AsyncSession:
+def get_background_session() -> AsyncSession:
     """
     Provides a new AsyncSession for background tasks.
     Ensures that each background task gets its own session.
