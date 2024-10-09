@@ -13,6 +13,7 @@ class UsageRead(BaseModel):
 
     class Config:
         orm_mode = True
+        from_attributes = True
 
 class UsageCreate(BaseModel):
     date: datetime
@@ -28,6 +29,7 @@ class MonthlySummary(BaseModel):
 
     class Config:
         orm_mode = True
+        from_attributes = True
 
 class DailySummary(BaseModel):
     date: str
@@ -36,3 +38,5 @@ class DailySummary(BaseModel):
 
     class Config:
         orm_mode = True
+        from_attributes = True
+
