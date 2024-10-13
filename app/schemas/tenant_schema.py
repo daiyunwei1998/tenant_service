@@ -52,7 +52,7 @@ class TenantUsageAlertUpdateSchema(BaseModel):
         return v
 
 class UsageAlertSchema(BaseModel):
-    usage_alert: Optional[int]
+    usage_alert: int
 
     class Config:
         orm_mode = True

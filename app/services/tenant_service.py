@@ -137,4 +137,4 @@ class TenantService:
         tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
-        return tenant.usage_alert
+        return tenant.usage_alert if tenant.usage_alert is not None else 0

@@ -16,7 +16,7 @@ from app.exceptions.tenant_exceptions import DuplicateTenantNameException, Dupli
 from app.models.tenant import Tenant, Base
 from app.routers import usage_router
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema, \
-    TenantUsageAlertUpdateSchema
+    TenantUsageAlertUpdateSchema, UsageAlertSchema
 from app.services.image_upload import upload_to_s3
 from app.services.tenant_service import TenantService
 from app.routers.file_upload import router as upload_router
