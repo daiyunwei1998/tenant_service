@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, HTTPException, Path, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from app.core.config import settings
@@ -45,6 +45,18 @@ class EntriesByDocNameResponse(BaseModel):
     tenantId: str
     docName: str
     entries: List[Entry]
+
+# Pydantic model for the add entry request
+class AddEntryRequest(BaseModel):
+    content: str = Field(..., description="The content of the entry to be added.")
+    docName: str = Field(..., description="The name of the document associated with the entry.")
+
+# Pydantic model for the add entry response
+class AddEntryResponse(BaseModel):
+    tenantId: str
+    docName: str
+    message: str
+
 
 # Update an entry's content identified by ID
 @router.put("/{tenantId}/entries/{entryId}", response_model=UpdateResponse)
@@ -98,3 +110,39 @@ async def delete_entry_by_id(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Endpoint to add a new entry with a custom doc_name
+@router.post("/{tenantId}/entries", response_model=AddEntryResponse, status_code=201)
+async def add_entry(
+    add_request: AddEntryRequest,
+    tenantId: str = Path(..., description="The unique ID of the tenant")
+):
+    """
+    Add a new entry to the knowledge base with a custom doc_name.
+
+    Args:
+        tenantId (str): The unique ID of the tenant.
+        add_request (AddEntryRequest): The request body containing content and doc_name.
+
+    Returns:
+        AddEntryResponse: Confirmation message upon successful addition.
+    """
+    try:
+        # Process the tenant data by passing content as a list with a single entry
+        vector_store_manager.process_tenant_data(
+            tenant_id=tenantId,
+            content=[add_request.content],
+            doc_name=add_request.docName
+        )
+        return {
+            "tenantId": tenantId,
+            "docName": add_request.docName,
+            "message": "Entry added successfully."
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=500, detail=str(re))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while adding the entry.")
