@@ -22,6 +22,7 @@ from app.schemas.billing_history_schema import BillingHistoryInfoSchema
 from app.schemas.billing_schema import BillingInfoSchema, BillingUpdateSchema, BillingCreateSchema
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema, \
     TenantUsageAlertUpdateSchema, UsageAlertSchema
+from app.services.billing_service import BillingService
 from app.services.image_upload import upload_to_s3
 from app.services.tenant_service import TenantService
 from app.routers.file_upload import router as upload_router
@@ -230,16 +231,16 @@ async def set_or_update_billing(
     """
     # Check if billing exists
     try:
-        billing = await TenantService.get_billing(db, tenant_id)
+        billing = await BillingService.get_billing(db, tenant_id)
         # If exists, update it
-        updated_billing = await TenantService.update_billing(db, tenant_id, billing_update)
+        updated_billing = await BillingService.update_billing(db, tenant_id, billing_update)
         return updated_billing
     except HTTPException as e:
         if e.status_code == 404:
             # If billing does not exist, create it
             billing_create = BillingCreateSchema(tenant_id=tenant_id, usage_alert=billing_update.usage_alert)
             try:
-                new_billing = await TenantService.set_billing(db, billing_create)
+                new_billing = await BillingService.set_billing(db, billing_create)
                 return new_billing
             except HTTPException as ce:
                 raise ce
@@ -257,7 +258,7 @@ async def get_billing(
     - **tenant_id**: The unique identifier of the tenant.
     - **Response**: JSON object containing billing information.
     """
-    billing = await TenantService.get_billing(db, tenant_id)
+    billing = await BillingService.get_billing(db, tenant_id)
     return billing
 
 # Billing History Endpoints
@@ -273,7 +274,7 @@ async def get_billing_history(
     - **tenant_id**: The unique identifier of the tenant.
     - **Response**: JSON array containing billing history records.
     """
-    billing_history = await TenantService.get_billing_history(db, tenant_id)
+    billing_history = await BillingService.get_billing_history(db, tenant_id)
     return billing_history
 
 @app.get("/api/v1/tenants/{tenant_id}/billing-history/{billing_id}/invoice")
@@ -290,12 +291,12 @@ async def download_invoice(
     - **Response**: Returns the invoice PDF file.
     """
     # Fetch the billing history record
-    billing_history = await get_billing_history_record(db, tenant_id, billing_id)
+    billing_history = await BillingService.get_billing_history_record(db, tenant_id, billing_id)
     if not billing_history or not billing_history.invoice_url:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     # Generate the PDF invoice
-    pdf_content = await generate_invoice(billing_history)
+    pdf_content = await BillingService.generate_invoice(billing_history)
 
     # Return the PDF as a StreamingResponse
     return StreamingResponse(
