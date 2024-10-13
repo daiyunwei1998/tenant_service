@@ -1,0 +1,90 @@
+<!-- app/templates/invoice_template.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice - {{ billing_history.period }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0 50px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        .header h1 {
+            margin: 0;
+        }
+        .details, .summary {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .details th, .summary th {
+            text-align: left;
+            padding: 5px;
+        }
+        .items {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .items th, .items td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        .items th {
+            background-color: #f2f2f2;
+        }
+        .total {
+            text-align: right;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Your Company Name</h1>
+        <p>Your Company Address</p>
+        <p>Email: contact@yourcompany.com | Phone: (123) 456-7890</p>
+    </div>
+
+    <table class="details">
+        <tr>
+            <th>Invoice Period:</th>
+            <td>{{ billing_history.period }}</td>
+        </tr>
+        <tr>
+            <th>Tenant ID:</th>
+            <td>{{ billing_history.tenant_id }}</td>
+        </tr>
+        <tr>
+            <th>Invoice Date:</th>
+            <td>{{ billing_history.created_at.strftime('%B %d, %Y') }}</td>
+        </tr>
+    </table>
+
+    <table class="items">
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Tokens Used</th>
+                <th>Price</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Service Usage</td>
+                <td>{{ billing_history.tokens_used }}</td>
+                <td>${{ "%.2f"|format(billing_history.total_price) }}</td>
+            </tr>
+            <!-- Add more rows if needed -->
+        </tbody>
+    </table>
+
+    <div class="total">
+        <strong>Total: ${{ "%.2f"|format(billing_history.total_price) }}</strong>
+    </div>
+</body>
+</html>

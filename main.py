@@ -1,6 +1,8 @@
 # app/main.py
 import asyncio
 import logging
+from io import BytesIO
+
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
@@ -9,12 +11,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.future import select
 
 from databases import Database
+from starlette.responses import StreamingResponse
 
 from app.core.config import settings
 from app.dependencies import get_db
 from app.exceptions.tenant_exceptions import DuplicateTenantNameException, DuplicateTenantAliasException
 from app.models.tenant import Tenant, Base
 from app.routers import usage_router
+from app.schemas.billing_history_schema import BillingHistoryInfoSchema
+from app.schemas.billing_schema import BillingInfoSchema, BillingUpdateSchema, BillingCreateSchema
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema, \
     TenantUsageAlertUpdateSchema, UsageAlertSchema
 from app.services.image_upload import upload_to_s3
@@ -209,3 +214,94 @@ async def get_usage_alert(
     """
     usage_alert = await TenantService.get_usage_alert(tenant_id, db)
     return {"usage_alert": usage_alert}
+
+
+@app.patch("/api/v1/tenants/{tenant_id}/billing", response_model=BillingInfoSchema)
+async def set_or_update_billing(
+        tenant_id: str,
+        billing_update: BillingUpdateSchema,
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Create or update billing information for a specific tenant.
+
+    - **tenant_id**: The unique identifier of the tenant.
+    - **usage_alert**: (Optional) The token usage threshold for alerts.
+    """
+    # Check if billing exists
+    try:
+        billing = await TenantService.get_billing(db, tenant_id)
+        # If exists, update it
+        updated_billing = await TenantService.update_billing(db, tenant_id, billing_update)
+        return updated_billing
+    except HTTPException as e:
+        if e.status_code == 404:
+            # If billing does not exist, create it
+            billing_create = BillingCreateSchema(tenant_id=tenant_id, usage_alert=billing_update.usage_alert)
+            try:
+                new_billing = await TenantService.set_billing(db, billing_create)
+                return new_billing
+            except HTTPException as ce:
+                raise ce
+        else:
+            raise e
+
+@app.get("/api/v1/tenants/{tenant_id}/billing", response_model=BillingInfoSchema)
+async def get_billing(
+        tenant_id: str,
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve billing information for a specific tenant.
+
+    - **tenant_id**: The unique identifier of the tenant.
+    - **Response**: JSON object containing billing information.
+    """
+    billing = await TenantService.get_billing(db, tenant_id)
+    return billing
+
+# Billing History Endpoints
+
+@app.get("/api/v1/tenants/{tenant_id}/billing-history", response_model=list[BillingHistoryInfoSchema])
+async def get_billing_history(
+        tenant_id: str,
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve billing history for a specific tenant.
+
+    - **tenant_id**: The unique identifier of the tenant.
+    - **Response**: JSON array containing billing history records.
+    """
+    billing_history = await TenantService.get_billing_history(db, tenant_id)
+    return billing_history
+
+@app.get("/api/v1/tenants/{tenant_id}/billing-history/{billing_id}/invoice")
+async def download_invoice(
+    tenant_id: str,
+    billing_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Download the invoice PDF for a specific billing record.
+
+    - **tenant_id**: The unique identifier of the tenant.
+    - **billing_id**: The unique identifier of the billing history record.
+    - **Response**: Returns the invoice PDF file.
+    """
+    # Fetch the billing history record
+    billing_history = await TenantService.get_billing_history_record(db, tenant_id, billing_id)
+    if not billing_history or not billing_history.invoice_url:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Generate the PDF invoice
+    pdf_content = await TenantService.generate_invoice(billing_history)
+
+    # Return the PDF as a StreamingResponse
+    return StreamingResponse(
+        BytesIO(pdf_content),
+        media_type='application/pdf',
+        headers={
+            'Content-Disposition': f'attachment; filename=Invoice_{billing_history.period.replace(" ", "_")}.pdf'
+        }
+    )

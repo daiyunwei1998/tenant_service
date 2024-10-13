@@ -14,7 +14,6 @@ pytest-asyncio
 httpx
 greenlet
 pika
-celery[redis]
 redis
 openparse~=0.5.7
 pymilvus~=2.3.8
@@ -25,10 +24,8 @@ gevent
 motor~=3.6.0
 asyncio~=3.4.3
 aiofiles~=24.1.0
-unstructured-ingest
-unstructured_client
 pymongo~=4.9.1
-unstructured-client~=0.25.9
-llama-parse~=0.5.7
 langchain
 langchain-community
+weasyprint
+jinja2
