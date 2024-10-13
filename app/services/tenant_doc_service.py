@@ -111,6 +111,16 @@ class TenantDocService:
         return docs
 
     @staticmethod
+    async def get_tenant_doc(tenant_id: str, doc_name: str, session: AsyncSession):
+        """
+        Fetch a TenantDoc by tenant_id and doc_name.
+        """
+        result = await session.execute(
+            select(TenantDoc).where(TenantDoc.tenant_id == tenant_id, TenantDoc.doc_name == doc_name)
+        )
+        return result.scalars().first()
+
+    @staticmethod
     async def update_num_entries(doc_id: int, new_num_entries: int, session: AsyncSession):
         """
         Update the num_entries for a specific TenantDoc.
