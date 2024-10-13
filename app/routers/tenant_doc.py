@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
 from app.schemas.tenant_doc_schema import TenantDocCreateSchema, TenantDocUpdateSchema, TenantDocInfoSchema
 from app.services.tenant_doc_service import TenantDocService
@@ -39,3 +39,4 @@ async def get_tenant_docs(tenant_id: str, db: AsyncSession = Depends(get_db)):
     if not docs:
         raise HTTPException(status_code=404, detail="No TenantDocs found for this tenant.")
     return docs
+

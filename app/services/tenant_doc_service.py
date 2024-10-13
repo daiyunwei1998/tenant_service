@@ -3,7 +3,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import delete as sqlalchemy_delete
+from sqlalchemy import delete as sqlalchemy_delete, update
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
@@ -109,3 +109,13 @@ class TenantDocService:
         )
         docs = result.scalars().all()
         return docs
+
+    @staticmethod
+    async def update_num_entries(doc_id: int, new_num_entries: int, session: AsyncSession):
+        """
+        Update the num_entries for a specific TenantDoc.
+        """
+        await session.execute(
+            update(TenantDoc).where(TenantDoc.id == doc_id).values(num_entries=new_num_entries)
+        )
+        await session.commit()

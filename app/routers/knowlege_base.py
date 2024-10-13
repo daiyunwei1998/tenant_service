@@ -5,9 +5,12 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from app.core.config import settings
+from app.dependencies import get_background_session
 # Assuming the VectorStoreManager and other dependencies are already defined
 from app.repository.vector_store import VectorStoreManager, OpenAIEmbeddingService, MilvusCollectionService
 from app.routers.tenant_doc import get_tenant_docs
+from app.schemas.tenant_doc_schema import TenantDocCreateSchema
+from app.services.tenant_doc_service import TenantDocService
 
 # Create a router instance for knowledge_base
 router = APIRouter(
@@ -115,8 +118,8 @@ async def delete_entry_by_id(
 # Endpoint to add a new entry with a custom doc_name
 @router.post("/{tenantId}/entries", response_model=AddEntryResponse, status_code=201)
 async def add_entry(
-    add_request: AddEntryRequest,
-    tenantId: str = Path(..., description="The unique ID of the tenant")
+        add_request: AddEntryRequest,
+        tenantId: str = Path(..., description="The unique ID of the tenant")
 ):
     """
     Add a new entry to the knowledge base with a custom doc_name.
@@ -129,6 +132,23 @@ async def add_entry(
         AddEntryResponse: Confirmation message upon successful addition.
     """
     try:
+        async with get_background_session() as session:
+            # Check if the TenantDoc already exists
+            existing_doc = await TenantDocService.get_tenant_doc(tenantId, add_request.docName, session)
+
+            if existing_doc:
+                # If the record exists, increment num_entries
+                new_num_entries = existing_doc.num_entries + 1
+                await TenantDocService.update_num_entries(existing_doc.id, new_num_entries, session)
+            else:
+                # If no record exists, create a new TenantDoc record with num_entries set to 1
+                tenant_doc_data = TenantDocCreateSchema(
+                    tenant_id=tenantId,
+                    doc_name=add_request.docName,
+                    num_entries=1
+                )
+                await TenantDocService.create_tenant_doc(tenant_doc_data, session)
+
         # Process the tenant data by passing content as a list with a single entry
         vector_store_manager.process_tenant_data(
             tenant_id=tenantId,
