@@ -8,7 +8,7 @@ class TenantCreateSchema(BaseModel):
     logo:str = ""
     name: str
     alias: constr(min_length=1, max_length=10)
-
+    usage_alert: Optional[int] = 0
     alias_pattern: Pattern = re.compile(r'^[a-zA-Z0-9]+$')
 
     class Config:
