@@ -18,7 +18,7 @@ from app.dependencies import get_db
 from app.exceptions.tenant_exceptions import DuplicateTenantNameException, DuplicateTenantAliasException
 from app.models.tenant import Tenant, Base
 from app.routers import usage_router
-from app.schemas.billing_history_schema import BillingHistoryInfoSchema
+from app.schemas.billing_history_schema import BillingHistoryInfoSchema, BillingHistoryCreateSchema
 from app.schemas.billing_schema import BillingInfoSchema, BillingUpdateSchema, BillingCreateSchema
 from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema, \
     TenantUsageAlertUpdateSchema, UsageAlertSchema
@@ -306,3 +306,30 @@ async def download_invoice(
             'Content-Disposition': f'attachment; filename=Invoice_{billing_history.period.replace(" ", "_")}.pdf'
         }
     )
+@app.post(
+    "/api/v1/tenants/{tenant_id}/billing-history",
+    response_model=BillingHistoryInfoSchema,
+    status_code=201,
+    summary="Create a billing history record for a tenant"
+)
+async def create_billing_history(
+    tenant_id: str,
+    billing_data: BillingHistoryCreateSchema,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new billing history record for a specific tenant.
+
+    - **tenant_id**: The unique identifier of the tenant.
+    - **billing_data**: Billing history details.
+    """
+    if tenant_id != billing_data.tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id in path and body do not match")
+
+    # Optionally, verify that the tenant exists
+    #tenant = await TenantService.get_tenant_by_id(db, tenant_id)
+    #if not tenant:
+    #    raise HTTPException(status_code=404, detail="Tenant not found")
+
+    new_billing_history = await BillingService.create_billing_history(db, billing_data)
+    return new_billing_history

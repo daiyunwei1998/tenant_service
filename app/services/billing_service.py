@@ -1,11 +1,11 @@
+from datetime import datetime
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
-from app.models.billing import Billing
 from app.models.billing_history import BillingHistory
-from app.schemas.billing_schema import BillingCreateSchema, BillingUpdateSchema
+from app.schemas.billing_history_schema import BillingHistoryCreateSchema
 from app.services.pdf_generator import generate_invoice_pdf
 from typing import List, Dict
 
@@ -63,36 +63,21 @@ class BillingService:
         return pdf_content
 
     @staticmethod
-    async def get_billing(db: AsyncSession, tenant_id: str) -> Billing:
-        result = await db.execute(select(Billing).where(Billing.tenant_id == tenant_id))
-        billing = result.scalar_one_or_none()
-        if not billing:
-            raise HTTPException(status_code=404, detail="Billing information not found")
-        return billing
-
-    @staticmethod
-    async def set_billing(db: AsyncSession, billing_data: BillingCreateSchema) -> Billing:
-        billing = Billing(**billing_data.dict())
-        db.add(billing)
+    async def create_billing_history(db: AsyncSession, billing_data: BillingHistoryCreateSchema) -> BillingHistory:
+        new_billing_history = BillingHistory(
+            tenant_id=billing_data.tenant_id,
+            period=billing_data.period,
+            tokens_used=billing_data.tokens_used,
+            total_price=billing_data.total_price,
+            invoice_url=billing_data.invoice_url,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(new_billing_history)
         try:
             await db.commit()
-            await db.refresh(billing)
-            return billing
-        except IntegrityError:
+            await db.refresh(new_billing_history)
+            return new_billing_history
+        except SQLAlchemyError as e:
             await db.rollback()
-            raise HTTPException(status_code=400, detail="Billing information for this tenant already exists")
-
-    @staticmethod
-    async def update_billing(db: AsyncSession, tenant_id: str, billing_update: BillingUpdateSchema) -> Billing:
-        billing = await BillingService.get_billing(db, tenant_id)
-        if billing_update.usage_alert is not None:
-            billing.usage_alert = billing_update.usage_alert
-        try:
-            await db.commit()
-            await db.refresh(billing)
-            return billing
-        except Exception as e:
-            await db.rollback()
-            raise HTTPException(status_code=500, detail=f"Failed to update billing information: {str(e)}")
-
-    # Additional methods for tenant management...
+            raise HTTPException(status_code=500, detail="Failed to create billing history") from e
