@@ -15,7 +15,8 @@ from app.dependencies import get_db
 from app.exceptions.tenant_exceptions import DuplicateTenantNameException, DuplicateTenantAliasException
 from app.models.tenant import Tenant, Base
 from app.routers import usage_router
-from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema
+from app.schemas.tenant_schema import TenantCreateSchema, TenantInfoSchema, TenantUpdateSchema, \
+    TenantUsageAlertUpdateSchema
 from app.services.image_upload import upload_to_s3
 from app.services.tenant_service import TenantService
 from app.routers.file_upload import router as upload_router
@@ -174,3 +175,37 @@ async def get_tenant(
         return {"data": tenant}
     else:
         raise HTTPException(status_code=404, detail="Tenant not found")
+
+
+@app.patch("/api/v1/tenants/{tenant_id}/usage-alert", response_model=TenantInfoSchema)
+async def update_usage_alert(
+        tenant_id: str,
+        usage_alert_data: TenantUsageAlertUpdateSchema,
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Update the usage_alert for a specific tenant.
+
+    - **tenant_id**: The unique identifier of the tenant.
+    - **usage_alert**: The new usage alert threshold (optional).
+    """
+    updated_tenant = await TenantService.update_usage_alert(
+        tenant_id=tenant_id,
+        usage_alert=usage_alert_data.usage_alert,
+        db=db
+    )
+    return updated_tenant
+
+@app.get("/api/v1/tenants/{tenant_id}/usage-alert", response_model=UsageAlertSchema)
+async def get_usage_alert(
+    tenant_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve the usage_alert value for a specific tenant.
+
+    - **tenant_id**: The unique identifier of the tenant.
+    - **Response**: JSON object containing the `usage_alert` value.
+    """
+    usage_alert = await TenantService.get_usage_alert(tenant_id, db)
+    return {"usage_alert": usage_alert}

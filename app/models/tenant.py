@@ -13,6 +13,7 @@ class Tenant(Base):
     name = Column(String(255), nullable=False)
     alias = Column(String(10), nullable=False, unique=True)  # Limit to 10 characters
     active_state = Column(Boolean, default=True, nullable=False)  # Active or inactive
+    usage_alert = Column(BIGINT(unsigned=True), nullable=True)
 
     __table_args__ = (
         Index('ix_tenant_alias', 'alias'),  # Create index on alias field

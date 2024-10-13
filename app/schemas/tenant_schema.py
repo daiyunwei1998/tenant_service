@@ -1,7 +1,7 @@
-from typing import Pattern
+from typing import Pattern, Optional
 import re
 
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, constr, Field, validator, field_validator
 
 
 class TenantCreateSchema(BaseModel):
@@ -35,3 +35,24 @@ class TenantInfoSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+class TenantUpdateSchema(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    alias: Optional[str] = Field(None, max_length=10)
+    active_state: Optional[bool]
+    usage_alert: Optional[int]  # You can include this here if you prefer
+
+class TenantUsageAlertUpdateSchema(BaseModel):
+    usage_alert: Optional[int] = Field(None, ge=0, description="Usage alert threshold")
+
+    @field_validator('usage_alert')
+    def check_usage_alert(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("usage_alert must be non-negative")
+        return v
+
+class UsageAlertSchema(BaseModel):
+    usage_alert: Optional[int]
+
+    class Config:
+        orm_mode = True
