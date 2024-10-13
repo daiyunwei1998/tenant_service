@@ -110,9 +110,10 @@ async def register_tenant(
 
     except IntegrityError:
         await db.rollback()
+        logging.error(IntegrityError)
         raise HTTPException(
             status_code=400,
-            detail={"error_code": "DUPLICATE_TENANT", "message": "Tenant with this name or alias already exists"}
+            detail={"error_code": "IntegrityError", "message": "Error creating tenant"}
         )
     except DuplicateTenantNameException as e:
         raise HTTPException(status_code=400, detail={"error_code": "DUPLICATE_TENANT_NAME", "message": e.message})
