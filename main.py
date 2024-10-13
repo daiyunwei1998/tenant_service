@@ -290,12 +290,12 @@ async def download_invoice(
     - **Response**: Returns the invoice PDF file.
     """
     # Fetch the billing history record
-    billing_history = await TenantService.get_billing_history_record(db, tenant_id, billing_id)
+    billing_history = await get_billing_history_record(db, tenant_id, billing_id)
     if not billing_history or not billing_history.invoice_url:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     # Generate the PDF invoice
-    pdf_content = await TenantService.generate_invoice(billing_history)
+    pdf_content = await generate_invoice(billing_history)
 
     # Return the PDF as a StreamingResponse
     return StreamingResponse(
