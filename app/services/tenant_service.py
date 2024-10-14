@@ -107,7 +107,7 @@ class TenantService:
         result = await db.execute(query)
         tenant = result.scalar_one_or_none()
 
-        return
+        return tenant
 
     @staticmethod
     async def update_usage_alert(tenant_id: str, usage_alert: Optional[int], db: AsyncSession) -> Tenant:
