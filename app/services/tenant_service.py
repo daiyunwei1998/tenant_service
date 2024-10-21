@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from fastapi import HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,3 +108,33 @@ class TenantService:
         tenant = result.scalar_one_or_none()
 
         return tenant
+
+    @staticmethod
+    async def update_usage_alert(tenant_id: str, usage_alert: Optional[int], db: AsyncSession) -> Tenant:
+        # Fetch the tenant by tenant_id
+        result = await db.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
+        tenant = result.scalar_one_or_none()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        # Update the usage_alert
+        tenant.usage_alert = usage_alert
+        db.add(tenant)
+        await db.commit()
+        await db.refresh(tenant)
+        return tenant
+
+    @staticmethod
+    async def get_usage_alert(tenant_id: str, db: AsyncSession) -> Optional[int]:
+        """
+        Retrieve the usage_alert value for a specific tenant.
+
+        :param tenant_id: The unique identifier of the tenant.
+        :param db: The database session.
+        :return: The usage_alert value if the tenant exists; otherwise, raises an HTTPException.
+        """
+        result = await db.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
+        tenant = result.scalar_one_or_none()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+        return tenant.usage_alert if tenant.usage_alert is not None else 0
